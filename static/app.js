@@ -14,16 +14,14 @@ async function initApp() {
     setupModalListeners();
     setupIntelligenceListeners();
     setupV31IntelligenceListeners();
-    setupModalIntelTabs();
-    setupV32Listeners();
-    setupV33Listeners();
-    setupV35Listeners();
-    setupV36AttentionPanel();
-    setupIntelligenceTabRouting();
+    setupPanelSubTabs();
     await fetchOverview();
     await fetchPatientsQueue();
     await fetchSideAuditEvents();
+    await fetchMajorRankChanges();
+    await fetchAttentionSignals();
 }
+
 
 function setupTabNavigation() {
     const navItems = document.querySelectorAll(".nav-item, .nav-tab");
@@ -336,6 +334,16 @@ async function fetchPatientsQueue() {
         if (data.status === "success") {
             currentPatients = data.patients;
             applyFilter(activeFilter);
+            renderQueueDistributionChart(currentPatients);
+            renderQueueCompositionChart(currentPatients);
+
+            if (currentPatients.length > 0) {
+                const topP = currentPatients[0];
+                const kpiTopScore = document.getElementById("kpi-top-score");
+                const kpiTopId = document.getElementById("kpi-top-id");
+                if (kpiTopScore) kpiTopScore.textContent = topP.priority_score.toFixed(1);
+                if (kpiTopId) kpiTopId.textContent = `#01 · ${topP.patient_id}`;
+            }
 
             if (!selectedPatientId && currentPatients.length > 0) {
                 selectedPatientId = currentPatients[0].patient_id;
@@ -450,12 +458,19 @@ window.selectPatientRow = async function(patientId, openModal = false) {
         console.error("Explainability fetch error:", err);
     }
 
+    const ptabWhy = document.getElementById("ptab-explanation");
+    if (ptabWhy) ptabWhy.textContent = `Why #${patient.rank}?`;
+
+    renderPatientBreakdownChart(patient);
+    renderRightPanelTabContent(currentPanelSubTab);
+
     if (openModal) {
         openPatientModal(patientId);
     }
 };
 
 window.openPatientModal = async function(patientId) {
+    selectedPatientId = patientId;
     const modal = document.getElementById("patient-detail-modal");
     if (!modal) return;
 
@@ -473,6 +488,9 @@ window.openPatientModal = async function(patientId) {
     document.getElementById("modal-patient-id").textContent = `PATIENT ${patient.patient_id}`;
     document.getElementById("modal-rank").textContent = `RANK #${patient.rank}`;
     document.getElementById("modal-priority-score").textContent = patient.priority_score.toFixed(1);
+
+    const mtabWhy = document.getElementById("mtab-why");
+    if (mtabWhy) mtabWhy.textContent = `WHY #${patient.rank}`;
 
     const statusBadge = document.getElementById("modal-status-badge");
     if (statusBadge) {
@@ -537,6 +555,8 @@ window.openPatientModal = async function(patientId) {
 
     // ── V3.1: Populate score breakdown table ───────────────────────
     populateV31Breakdown(patient);
+    // ── V3.5: Populate patient recent activity & audit trace ───────
+    fetchPatientAuditHistory(patient.patient_id);
     // Reset response panel on new patient open
     const respPanel = document.getElementById("v31-response-panel");
     const errPanel  = document.getElementById("v31-error-panel");
@@ -749,509 +769,620 @@ async function fetchAuditTimeline() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MODAL INTELLIGENCE TABS — switch between EXPLAIN / COMPARE / WHAT-IF / AUDIT
-// ══════════════════════════════════════════════════════════════════════════════
-function setupModalIntelTabs() {
-    document.querySelectorAll(".intel-tab-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-            // Deactivate all
-            document.querySelectorAll(".intel-tab-btn").forEach(b => b.classList.remove("active"));
-            document.querySelectorAll(".intel-modal-pane").forEach(p => p.classList.remove("active"));
-            // Activate selected
-            btn.classList.add("active");
-            const pane = document.getElementById(`impane-${btn.dataset.imtab}`);
-            if (pane) pane.classList.add("active");
-            // Reset shared response panel on tab switch
-            const resp = document.getElementById("v31-response-panel");
-            const err  = document.getElementById("v31-error-panel");
-            if (resp) resp.style.display = "none";
-            if (err)  err.style.display  = "none";
-        });
-    });
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// V3.2 — PATIENT COMPARISON
+// V3.5 — AUDIT INTELLIGENCE & SMALL ATTENTION FOUNDATION CLIENT LOGIC
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Current ranked queue cache for comparison
-let cachedRankedQueue = [];
-
-async function runComparison(pidA, pidB) {
-    if (!pidA || !pidB) {
-        showModalIntelResponse("INSUFFICIENT DATA FOR COMPARISON\n\nBoth patients must be present in the current queue.", "CareGrid Priority Engine");
-        return;
-    }
-    showModalIntelResponse("Comparing patients…", "—");
+async function fetchMajorRankChanges() {
+    const container = document.getElementById("small-attention-container");
+    const textEl = document.getElementById("major-rank-pill-text");
+    const btn = document.getElementById("btn-major-rank-pill");
+    if (!container) return;
 
     try {
-        const res = await fetch("/api/intelligence/compare", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({patient_id_a: pidA, patient_id_b: pidB})
-        });
+        const res = await fetch("/api/attention/major-changes?threshold=2");
         const data = await res.json();
-
-        if (data.status === "success") {
-            // Populate side-by-side display
-            populateCompareDisplay(data);
-            showModalIntelResponse(data.explanation, data.source);
+        if (data.status === "success" && data.major_changes && data.major_changes.length > 0) {
+            const topChange = data.major_changes[0];
+            container.style.display = "flex";
+            if (textEl) {
+                textEl.textContent = `${topChange.patient_id} (#${topChange.previous_rank} → #${topChange.new_rank})`;
+            }
+            if (btn) {
+                btn.onclick = () => {
+                    openPatientDetailModal(topChange.patient_id);
+                    askPatientIntelligence(topChange.patient_id, "trace_move");
+                };
+            }
         } else {
-            showModalIntelError();
+            container.style.display = "none";
         }
     } catch (err) {
-        console.error("V3.2 compare error:", err);
-        showModalIntelError();
+        console.error("Fetch major rank changes failed:", err);
+        if (container) container.style.display = "none";
     }
 }
 
-function populateCompareDisplay(data) {
-    const display = document.getElementById("v32-compare-display");
-    const colA    = document.getElementById("v32-col-a");
-    const colB    = document.getElementById("v32-col-b");
-    const diffEl  = document.getElementById("v32-biggest-diff");
-    if (!display || !colA || !colB) return;
-
-    const renderCol = (p) => `
-        <div class="v32-row"><span class="v32-row-label">Patient ID</span><span class="v32-row-val">${p.patient_id}</span></div>
-        <div class="v32-row"><span class="v32-row-label">Rank</span><span class="v32-row-val">#${p.rank}</span></div>
-        <div class="v32-row"><span class="v32-row-label">Priority Score</span><span class="v32-row-val">${p.priority_score}</span></div>
-        <div class="v32-row"><span class="v32-row-label">Severity</span><span class="v32-row-val">${p.severity}</span></div>
-        <div class="v32-row"><span class="v32-row-label">Survival</span><span class="v32-row-val">${p.survival_likelihood}%</span></div>
-        <div class="v32-row"><span class="v32-row-label">Waiting</span><span class="v32-row-val">${p.waiting_time_minutes} min</span></div>
-        <div class="v32-row"><span class="v32-row-label">Sev. Contribution</span><span class="v32-row-val">+${p.contributions.severity_contribution}</span></div>
-        <div class="v32-row"><span class="v32-row-label">Surv. Contribution</span><span class="v32-row-val">+${p.contributions.survival_contribution}</span></div>
-        <div class="v32-row"><span class="v32-row-label">Wait Contribution</span><span class="v32-row-val">+${p.contributions.waiting_contribution}</span></div>
-    `;
-
-    colA.innerHTML = renderCol(data.patient_a);
-    colB.innerHTML = renderCol(data.patient_b);
-    if (diffEl) {
-        diffEl.innerHTML = `<strong>Largest Difference:</strong> ${data.biggest_diff_factor} &nbsp;|&nbsp; Score Gap: <strong>${data.score_difference} pts</strong>`;
-    }
-    display.style.display = "block";
-}
-
-function setupV32Listeners() {
-    const btnAbove = document.getElementById("v32-btn-above");
-    const btnBelow = document.getElementById("v32-btn-below");
-    const btnAsk   = document.getElementById("v32-btn-ask");
-    const freeIn   = document.getElementById("v32-free-input");
-
-    if (btnAbove) {
-        btnAbove.addEventListener("click", async () => {
-            if (!selectedPatientId) return;
-            // Find patient above in cached queue
-            const idx = cachedRankedQueue.findIndex(p => p.patient_id === selectedPatientId);
-            if (idx > 0) {
-                await runComparison(selectedPatientId, cachedRankedQueue[idx - 1].patient_id);
-            } else {
-                showModalIntelResponse("This patient is already ranked #1 — no patient above.", "CareGrid Priority Engine");
-            }
-        });
-    }
-
-    if (btnBelow) {
-        btnBelow.addEventListener("click", async () => {
-            if (!selectedPatientId) return;
-            const idx = cachedRankedQueue.findIndex(p => p.patient_id === selectedPatientId);
-            if (idx >= 0 && idx < cachedRankedQueue.length - 1) {
-                await runComparison(selectedPatientId, cachedRankedQueue[idx + 1].patient_id);
-            } else {
-                showModalIntelResponse("No patient below this rank in the current queue.", "CareGrid Priority Engine");
-            }
-        });
-    }
-
-    if (btnAsk && freeIn) {
-        const doAsk = async () => {
-            const q = freeIn.value.trim();
-            if (!q || !selectedPatientId) return;
-            // Extract any second patient ID from question
-            const m = q.match(/P-?\d+/gi);
-            const pidB = m ? m.find(id => id.toUpperCase() !== selectedPatientId.toUpperCase()) : null;
-            const idx  = cachedRankedQueue.findIndex(p => p.patient_id === selectedPatientId);
-            const compareTo = pidB || (idx > 0 ? cachedRankedQueue[idx - 1].patient_id : null)
-                                   || (idx < cachedRankedQueue.length - 1 ? cachedRankedQueue[idx + 1].patient_id : null);
-            if (compareTo) await runComparison(selectedPatientId, compareTo);
-            else showModalIntelResponse("Could not identify a second patient to compare. Try 'Compare with patient above' or 'Compare with patient below'.", "CareGrid Intelligence");
-        };
-        btnAsk.addEventListener("click", doAsk);
-        freeIn.addEventListener("keydown", e => { if (e.key === "Enter") doAsk(); });
-    }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// V3.3 / V3.4 — WHAT-IF SIMULATION + BEFORE/AFTER
-// ══════════════════════════════════════════════════════════════════════════════
-
-async function runWhatIfScenario(action, patientId = null) {
-    // Capture BEFORE state
-    const beforeQueueRes = await fetch("/api/patients?limit=10");
-    const beforeData     = await beforeQueueRes.json();
-    const beforeQueue    = (beforeData.patients || []).slice(0, 5).map(p => ({
-        patient_id: p.patient_id, rank: p.rank, priority_score: p.priority_score
-    }));
-
-    // Render BEFORE list immediately
-    const beforeAfterEl = document.getElementById("v34-before-after");
-    const beforeList    = document.getElementById("v34-before-list");
-    if (beforeList) {
-        beforeList.innerHTML = beforeQueue.map(p =>
-            `<div>#${p.rank} &nbsp;${p.patient_id} &nbsp;<span style="color:#64748b;">${p.priority_score}</span></div>`
-        ).join("");
-    }
-
-    showModalIntelResponse("Running simulation…", "—");
+async function fetchAttentionSignals() {
+    const container = document.getElementById("attention-cards-container");
+    const countBadge = document.getElementById("attention-signals-count-badge");
+    if (!container) return;
 
     try {
-        // Run the simulation via existing engine
-        const payload = {event_type: action};
-        if (action === "advance_time") payload.minutes = 30;
-        if (action === "severity_spike" && patientId) payload.patient_id = patientId;
+        const res = await fetch("/api/attention/signals");
+        const data = await res.json();
 
-        const simRes  = await fetch("/api/simulation/event", {
+        if (data.status === "success" && data.signals && data.signals.length > 0) {
+            const signals = data.signals;
+            if (countBadge) {
+                countBadge.textContent = `${signals.length} ACTIVE SIGNALS`;
+                countBadge.className = "status-badge warning";
+            }
+
+            container.innerHTML = signals.map(sig => {
+                let badgeStyle = "background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;";
+                if (sig.severity_class === "critical") badgeStyle = "background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;";
+                else if (sig.severity_class === "warning") badgeStyle = "background: #fffbeb; color: #d97706; border: 1px solid #fde68a;";
+
+                let actionOnClick = "";
+                if (sig.signal_type === "NEAR_TIE") {
+                    actionOnClick = `openPatientComparison('${sig.patient_id_a}', '${sig.patient_id_b}')`;
+                } else if (sig.signal_type === "MAJOR_RANK_CHANGE" || sig.signal_type === "WAITING_TIME_ATTENTION") {
+                    actionOnClick = `selectPatientRow('${sig.patient_id}', true)`;
+                } else if (sig.signal_type === "CRITICAL_QUEUE_LOAD") {
+                    actionOnClick = `filterQueue('critical')`;
+                } else {
+                    actionOnClick = `selectPatientRow('${sig.patient_id || ''}', true)`;
+                }
+
+                return `
+                    <div class="ui-card" style="padding: 12px 14px; border-left: 3px solid ${sig.severity_class === 'critical' ? 'var(--status-critical)' : sig.severity_class === 'warning' ? 'var(--status-warning)' : 'var(--accent-blue)'}; margin-bottom: 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+                            <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; ${badgeStyle}">${sig.badge_label}</span>
+                            <button class="btn-ops" style="font-size: 10px; padding: 3px 8px; background: #0f172a;" onclick="${actionOnClick}">${sig.action_label}</button>
+                        </div>
+                        <h4 style="font-size: 12px; font-weight: 700; color: #0f172a; margin: 0 0 4px;">${sig.title}</h4>
+                        <p style="font-size: 11px; color: #475569; margin: 0 0 8px; line-height: 1.4;">${sig.description}</p>
+                        <button style="font-size: 10.5px; font-weight: 600; color: #0284c7; background: transparent; border: none; padding: 0; cursor: pointer; text-decoration: underline;" onclick="explainAttentionSignal('${sig.id}')">
+                            Why is this flagged?
+                        </button>
+                    </div>
+                `;
+            }).join("");
+
+            window.liveAttentionSignals = signals;
+        } else {
+            if (countBadge) {
+                countBadge.textContent = "0 ACTIVE SIGNALS";
+                countBadge.className = "status-badge success";
+            }
+            container.innerHTML = `
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px 16px; text-align: center; color: var(--status-success); font-size: 11px; font-weight: 600;">
+                    NO SIGNIFICANT ATTENTION SIGNALS — Queue operating within normal operational parameters.
+                </div>
+            `;
+        }
+    } catch (err) {
+        console.error("Fetch attention signals failed:", err);
+        if (countBadge) {
+            countBadge.textContent = "TEMPORARILY UNAVAILABLE";
+            countBadge.className = "status-badge critical";
+        }
+        container.innerHTML = `
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 12px 16px; text-align: center; color: var(--status-critical); font-size: 11px; font-weight: 600;">
+                ATTENTION SIGNALS TEMPORARILY UNAVAILABLE — Core CareGrid priority queue remains fully operational.
+            </div>
+        `;
+    }
+}
+
+async function explainAttentionSignal(signalId) {
+    const signals = window.liveAttentionSignals || [];
+    const sig = signals.find(s => s.id === signalId);
+    if (!sig) return;
+
+    // Switch to CareGrid Intelligence tab
+    const intelNav = document.querySelector('.nav-item[data-tab="intelligence"]');
+    if (intelNav) intelNav.click();
+
+    const freeInput = document.getElementById("intel-free-input");
+    if (freeInput) freeInput.value = `Why is this flagged? (${sig.title})`;
+
+    try {
+        const res = await fetch("/api/intelligence/explain-attention", {
             method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(payload)
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ signal: sig })
         });
-        const simData = await simRes.json();
+        const data = await res.json();
+        if (data.status === "success") {
+            renderIntelAnswer(sig.title, data.answer, data.source);
+        }
+    } catch (err) {
+        renderIntelAnswer(sig.title, sig.description, "CareGrid Attention Engine (Deterministic Fallback)");
+    }
+}
 
-        if (!simData || simData.status === "error") {
-            showModalIntelError();
+async function fetchPatientAuditHistory(patientId) {
+    const container = document.getElementById("v35-patient-audit-container");
+    if (!container) return;
+    try {
+        const res = await fetch(`/api/audit?limit=20`);
+        const data = await res.json();
+        const events = (data.events || []).filter(e => e.patient_id === patientId);
+
+        if (events.length === 0) {
+            container.innerHTML = `<div style="color: var(--text-muted); font-size: 11px;">NO RECENT ACTIVITY FOR THIS PATIENT</div>`;
             return;
         }
 
-        // Capture AFTER state
-        const afterQueueRes = await fetch("/api/patients?limit=10");
-        const afterData     = await afterQueueRes.json();
-        const afterQueue    = (afterData.patients || []).slice(0, 5).map(p => ({
-            patient_id: p.patient_id, rank: p.rank, priority_score: p.priority_score
-        }));
+        let html = events.slice(0, 3).map(e => `
+            <div style="margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed #e2e8f0;">
+                <div style="display: flex; justify-content: space-between; font-weight: 600; color: #0f172a;">
+                    <span>${e.event_type}</span>
+                    <span style="font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted);">${(e.timestamp || '').substring(11, 19)}</span>
+                </div>
+                ${e.previous_rank && e.new_rank ? `<div style="font-size: 11px; color: var(--accent-green); font-weight: 700;">Rank Shift: #${e.previous_rank} → #${e.new_rank}</div>` : ''}
+                <div style="font-size: 11px; color: #475569;">${e.reason || ''}</div>
+            </div>
+        `).join('');
 
-        // Render AFTER list
-        const afterList = document.getElementById("v34-after-list");
-        if (afterList) {
-            afterList.innerHTML = afterQueue.map(p => {
-                const was = beforeQueue.find(b => b.patient_id === p.patient_id);
-                const arrow = !was ? '<span class="v34-new"> NEW</span>'
-                            : p.rank < was.rank ? '<span class="v34-up"> ↑</span>'
-                            : p.rank > was.rank ? '<span class="v34-down"> ↓</span>' : '';
-                return `<div>#${p.rank} &nbsp;${p.patient_id} &nbsp;<span style="color:#64748b;">${p.priority_score}</span>${arrow}</div>`;
-            }).join("");
-        }
-
-        // Change table
-        renderChangeTable(beforeQueue, afterQueue, simData);
-
-        if (beforeAfterEl) beforeAfterEl.style.display = "block";
-
-        // Update "Last Simulation" badge in Intel tab
-        const badge = document.getElementById("intel-last-sim-badge");
-        if (badge) badge.textContent = action.replace(/_/g, " ").toUpperCase();
-
-        // Get AI explanation via /api/intelligence/explain-simulation
-        const explainRes = await fetch("/api/intelligence/explain-simulation", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({sim_result: simData, before_queue: beforeQueue})
-        });
-        const explainData = await explainRes.json();
-        showModalIntelResponse(
-            explainData.answer || "Simulation completed.",
-            explainData.source || "CareGrid Simulation Engine"
-        );
-
-        // Refresh main queue display
-        await fetchPatientsQueue();
-        await fetchSideAuditEvents();
-
+        const latest = events[0];
+        html += `
+            <div style="margin-top: 8px; font-size: 10.5px; background: #f8fafc; padding: 8px; border-radius: 6px; font-family: var(--font-mono); line-height: 1.5;">
+                <div style="font-weight: 700; color: #64748b; margin-bottom: 4px;">RANK CHANGE TRACE</div>
+                <div>${latest.event_type} ↓</div>
+                <div>${latest.reason || 'Parameter Change'} ↓</div>
+                <div>Priority Engine Recalculation (50/30/20) ↓</div>
+                <div>Rank Position #${latest.new_rank || 'N/A'} ↓</div>
+                <div>Audit Event ${latest.event_id || 'EVT'} Logged</div>
+            </div>
+        `;
+        container.innerHTML = html;
     } catch (err) {
-        console.error("V3.3 what-if error:", err);
-        showModalIntelError();
+        console.error("Fetch patient audit failed:", err);
+        container.innerHTML = `<div style="color: var(--text-muted); font-size: 11px;">Audit trace unavailable</div>`;
     }
 }
 
-function renderChangeTable(before, after, simData) {
-    const el = document.getElementById("v34-change-table");
-    if (!el) return;
+// ══════════════════════════════════════════════════════════════════════════════
+// PATIENT DETAIL TAB NAVIGATION BUG FIX — OVERVIEW / BREAKDOWN / WHY #RANK
+// ══════════════════════════════════════════════════════════════════════════════
 
-    // Combine all patient IDs seen in before or after
-    const allIds = [...new Set([...before.map(p => p.patient_id), ...after.map(p => p.patient_id)])];
-    const rows = allIds.slice(0, 8).map(pid => {
-        const b = before.find(p => p.patient_id === pid);
-        const a = after.find(p => p.patient_id === pid);
-        if (!b) return `<tr><td>${pid}</td><td>—</td><td>#${a.rank}</td><td class="v34-new">NEW</td></tr>`;
-        if (!a) return `<tr><td>${pid}</td><td>#${b.rank}</td><td>—</td><td class="v34-down">REMOVED</td></tr>`;
-        const change = b.rank - a.rank;
-        const cls    = change > 0 ? "v34-up" : change < 0 ? "v34-down" : "";
-        const label  = change > 0 ? `↑${change}` : change < 0 ? `↓${Math.abs(change)}` : "—";
-        return `<tr><td>${pid}</td><td>#${b.rank} / ${b.priority_score}</td><td>#${a.rank} / ${a.priority_score}</td><td class="${cls}">${label}</td></tr>`;
-    }).join("");
+let currentPanelSubTab = "overview";
+let currentModalSubTab = "overview";
 
-    el.innerHTML = `
-        <table class="v34-change-table">
-            <thead><tr><th>PATIENT</th><th>BEFORE</th><th>AFTER</th><th>CHANGE</th></tr></thead>
-            <tbody>${rows}</tbody>
-        </table>
-    `;
-}
+function setupPanelSubTabs() {
+    // 1. Right Column Card Tabs
+    const pTabs = [
+        { id: "ptab-overview", mode: "overview" },
+        { id: "ptab-breakdown", mode: "breakdown" },
+        { id: "ptab-explanation", mode: "why" }
+    ];
 
-function setupV33Listeners() {
-    const actions = {
-        "v33-btn-new-critical": "new_critical_patient",
-        "v33-btn-discharge":    "discharge_top",
-        "v33-btn-advance":      "advance_time",
-        "v33-btn-severity":     "severity_spike"
-    };
-
-    Object.entries(actions).forEach(([id, action]) => {
-        const btn = document.getElementById(id);
+    pTabs.forEach(t => {
+        const btn = document.getElementById(t.id);
         if (btn) {
             btn.addEventListener("click", () => {
-                const patientId = action === "severity_spike" ? selectedPatientId : null;
-                runWhatIfScenario(action, patientId);
+                pTabs.forEach(item => {
+                    const b = document.getElementById(item.id);
+                    if (b) b.classList.remove("active");
+                });
+                btn.classList.add("active");
+                currentPanelSubTab = t.mode;
+                renderRightPanelTabContent(currentPanelSubTab);
             });
         }
     });
 
-    const freeIn = document.getElementById("v33-free-input");
-    const runBtn = document.getElementById("v33-btn-ask");
-    if (freeIn && runBtn) {
-        const doRun = async () => {
-            const q = freeIn.value.trim();
-            if (!q) return;
-            // Interpret via backend
-            const res = await fetch("/api/intelligence/whatif", {
+    // 2. Modal Sub-Tabs
+    const mTabs = [
+        { id: "mtab-overview", mode: "overview" },
+        { id: "mtab-breakdown", mode: "breakdown" },
+        { id: "mtab-why", mode: "why" }
+    ];
+
+    mTabs.forEach(t => {
+        const btn = document.getElementById(t.id);
+        if (btn) {
+            btn.addEventListener("click", () => {
+                mTabs.forEach(item => {
+                    const b = document.getElementById(item.id);
+                    if (b) b.classList.remove("active");
+                });
+                btn.classList.add("active");
+                currentModalSubTab = t.mode;
+                renderModalSubTabContent(currentModalSubTab);
+            });
+        }
+    });
+}
+
+async function renderRightPanelTabContent(tabMode) {
+    if (!selectedPatientId) return;
+    let patient = currentPatients.find(p => p.patient_id === selectedPatientId || p.record_id === selectedPatientId);
+    if (!patient) return;
+
+    // Update dynamic button label
+    const ptabWhy = document.getElementById("ptab-explanation");
+    if (ptabWhy) ptabWhy.textContent = `Why #${patient.rank}?`;
+
+    const rankEl = document.getElementById("panel-explain-rank-text");
+    const pidEl = document.getElementById("panel-explain-pid-text");
+    const scoreEl = document.getElementById("panel-explain-score-text");
+    if (rankEl) rankEl.textContent = `#${patient.rank}`;
+    if (pidEl) pidEl.textContent = patient.patient_id;
+    if (scoreEl) scoreEl.textContent = patient.priority_score.toFixed(1);
+
+    const explainText = document.getElementById("panel-explain-text");
+
+    if (tabMode === "overview") {
+        try {
+            const expRes = await fetch(`/api/explain/${patient.patient_id}`);
+            const expData = await expRes.json();
+            if (expData.status === "success" && explainText) {
+                explainText.textContent = expData.explainability.explanation_text;
+            }
+        } catch (err) {
+            if (explainText) explainText.textContent = `Patient ${patient.patient_id} holds Rank #${patient.rank} with priority score ${patient.priority_score.toFixed(1)}.`;
+        }
+    } else if (tabMode === "breakdown") {
+        const weights = { severity: 0.50, survival: 0.30, waiting: 0.20 };
+        const sevContrib  = +(patient.severity * weights.severity).toFixed(1);
+        const survContrib = +(patient.survival_likelihood * weights.survival).toFixed(1);
+        const waitRaw     = Math.min(100.0, patient.waiting_time_minutes / 1.2);
+        const waitContrib = +(waitRaw * weights.waiting).toFixed(1);
+
+        const contrib = { severity: sevContrib, survival: survContrib, waiting: waitContrib };
+        const dominantKey = Object.entries(contrib).sort((a,b) => b[1]-a[1])[0][0];
+        const dominantLabel = { severity: "Severity", survival: "Survival Likelihood", waiting: "Waiting Duration" }[dominantKey];
+
+        if (explainText) {
+            explainText.innerHTML = `
+                <strong>SCORE BREAKDOWN (Rank #${patient.rank})</strong><br>
+                • Severity (SOFA): +${sevContrib} pts (50% weight)<br>
+                • Survival Likelihood: +${survContrib} pts (30% weight)<br>
+                • Waiting Duration: +${waitContrib} pts (20% weight)<br>
+                <strong>Dominant Factor:</strong> ${dominantLabel}
+            `;
+        }
+    } else if (tabMode === "why") {
+        if (explainText) explainText.textContent = `Fetching grounded rank explanation for Patient ${patient.patient_id}...`;
+        try {
+            const askRes = await fetch("/api/intelligence/ask-patient", {
                 method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({question: q, patient_id: selectedPatientId})
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    patient_id: patient.patient_id,
+                    mode: "why_ranked"
+                })
             });
-            const data = await res.json();
-            if (data.status === "ready") {
-                const s = data.scenario;
-                await runWhatIfScenario(s.action, s.patient_id || selectedPatientId);
-            } else {
-                showModalIntelResponse(data.message || "SIMULATION COULD NOT BE COMPLETED", "CareGrid Intelligence");
+            const askData = await askRes.json();
+            if (askData.status === "success" && explainText) {
+                explainText.textContent = askData.answer;
             }
-        };
-        runBtn.addEventListener("click", doRun);
-        freeIn.addEventListener("keydown", e => { if (e.key === "Enter") doRun(); });
-    }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// V3.5 — AUDIT INTELLIGENCE
-// ══════════════════════════════════════════════════════════════════════════════
-
-function setupV35Listeners() {
-    const btnRecent  = document.getElementById("v35-btn-recent");
-    const btnPatient = document.getElementById("v35-btn-patient");
-
-    if (btnRecent) {
-        btnRecent.addEventListener("click", async () => {
-            showModalIntelResponse("Loading audit summary…", "—");
-            try {
-                const res  = await fetch("/api/intelligence/audit-summary", {
-                    method: "POST", headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({limit: 10})
-                });
-                const data = await res.json();
-                showModalIntelResponse(data.answer || "AUDIT INFORMATION UNAVAILABLE", data.source || "CareGrid Audit Log");
-            } catch (e) { showModalIntelError(); }
-        });
-    }
-
-    if (btnPatient) {
-        btnPatient.addEventListener("click", async () => {
-            if (!selectedPatientId) {
-                showModalIntelResponse("No patient selected.", "CareGrid Audit Log");
-                return;
-            }
-            showModalIntelResponse(`Loading audit events for ${selectedPatientId}…`, "—");
-            try {
-                const res  = await fetch("/api/intelligence/audit-summary", {
-                    method: "POST", headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({patient_id: selectedPatientId, limit: 10})
-                });
-                const data = await res.json();
-                showModalIntelResponse(data.answer || "AUDIT INFORMATION UNAVAILABLE", data.source || "CareGrid Audit Log");
-            } catch (e) { showModalIntelError(); }
-        });
-    }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// V3.6 — ATTENTION REQUIRED PANEL
-// ══════════════════════════════════════════════════════════════════════════════
-
-function setupV36AttentionPanel() {
-    const refreshBtn = document.getElementById("btn-refresh-attention");
-    if (refreshBtn) {
-        refreshBtn.addEventListener("click", loadAttentionSignals);
-    }
-    // Load when Intelligence tab is opened
-    document.querySelectorAll(".nav-item").forEach(item => {
-        if (item.dataset.tab === "intelligence") {
-            item.addEventListener("click", loadAttentionSignals);
+        } catch (err) {
+            if (explainText) explainText.textContent = `Patient ${patient.patient_id} is ranked #${patient.rank} with priority score ${patient.priority_score.toFixed(1)}.`;
         }
+    }
+}
+
+async function renderModalSubTabContent(tabMode) {
+    if (!selectedPatientId) return;
+    let patient = currentPatients.find(p => p.patient_id === selectedPatientId || p.record_id === selectedPatientId);
+    if (!patient) return;
+
+    // Update dynamic modal button label
+    const mtabWhy = document.getElementById("mtab-why");
+    if (mtabWhy) mtabWhy.textContent = `WHY #${patient.rank}`;
+
+    const explainText = document.getElementById("modal-explain-text");
+
+    if (tabMode === "overview") {
+        try {
+            const expRes = await fetch(`/api/explain/${patient.patient_id}`);
+            const expData = await expRes.json();
+            if (expData.status === "success" && explainText) {
+                explainText.textContent = expData.explainability.explanation_text;
+            }
+        } catch (err) {
+            if (explainText) explainText.textContent = `High SOFA-derived severity is the primary contributor for Patient ${patient.patient_id}.`;
+        }
+    } else if (tabMode === "breakdown") {
+        const weights = { severity: 0.50, survival: 0.30, waiting: 0.20 };
+        const sevContrib  = +(patient.severity * weights.severity).toFixed(1);
+        const survContrib = +(patient.survival_likelihood * weights.survival).toFixed(1);
+        const waitRaw     = Math.min(100.0, patient.waiting_time_minutes / 1.2);
+        const waitContrib = +(waitRaw * weights.waiting).toFixed(1);
+
+        if (explainText) {
+            explainText.innerHTML = `
+                SCORE CONTRIBUTION BREAKDOWN — PATIENT ${patient.patient_id} (Rank #${patient.rank})<br>
+                • Severity (SOFA-derived): ${patient.severity} → +${sevContrib} pts<br>
+                • Survival Likelihood: ${patient.survival_likelihood}% → +${survContrib} pts<br>
+                • Waiting Duration: ${patient.waiting_time_minutes} min → +${waitContrib} pts
+            `;
+        }
+    } else if (tabMode === "why") {
+        if (explainText) explainText.textContent = `Loading grounded rank explanation for Patient ${patient.patient_id}...`;
+        try {
+            const askRes = await fetch("/api/intelligence/ask-patient", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    patient_id: patient.patient_id,
+                    mode: "why_ranked"
+                })
+            });
+            const askData = await askRes.json();
+            if (askData.status === "success" && explainText) {
+                explainText.textContent = askData.answer;
+            }
+        } catch (err) {
+            if (explainText) explainText.textContent = `Patient ${patient.patient_id} is ranked #${patient.rank} with priority score ${patient.priority_score.toFixed(1)}.`;
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// V5.0 — AESTHETIC DATA VISUALIZATION UPGRADE (CHARTS & GRAPHS)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// CHART 1: QUEUE PRIORITY DISTRIBUTION (SVG Bar Chart)
+function renderQueueDistributionChart(patients) {
+    const container = document.getElementById("chart-queue-distribution");
+    if (!container || !patients || patients.length === 0) return;
+
+    const topSubset = patients.slice(0, 15);
+    const maxScore = Math.max(...topSubset.map(p => p.priority_score), 100);
+    const svgWidth = 500;
+    const svgHeight = 85;
+    const barWidth = 22;
+    const gap = 8;
+    const paddingLeft = 24;
+
+    let svg = `<svg viewBox="0 0 ${svgWidth} ${svgHeight}" style="width: 100%; height: 100%; font-family: var(--font-sans);">`;
+    svg += `<line x1="${paddingLeft}" y1="10" x2="${svgWidth}" y2="10" stroke="#e2e8f0" stroke-dasharray="3,3"/>`;
+    svg += `<line x1="${paddingLeft}" y1="38" x2="${svgWidth}" y2="38" stroke="#e2e8f0" stroke-dasharray="3,3"/>`;
+    svg += `<line x1="${paddingLeft}" y1="65" x2="${svgWidth}" y2="65" stroke="#cbd5e1"/>`;
+
+    svg += `<text x="18" y="13" font-size="8.5" fill="#94a3b8" text-anchor="end">100</text>`;
+    svg += `<text x="18" y="41" font-size="8.5" fill="#94a3b8" text-anchor="end">50</text>`;
+    svg += `<text x="18" y="68" font-size="8.5" fill="#94a3b8" text-anchor="end">0</text>`;
+
+    topSubset.forEach((p, idx) => {
+        const x = paddingLeft + idx * (barWidth + gap);
+        const h = Math.max(6, (p.priority_score / maxScore) * 55);
+        const y = 65 - h;
+        const color = p.severity >= 70.0 ? '#ef4444' : p.patient_status === 'Admitted' ? '#10b981' : '#3b82f6';
+        
+        svg += `
+            <g cursor="pointer" onclick="selectPatientRow('${p.patient_id}', false)">
+                <rect x="${x}" y="${y}" width="${barWidth}" height="${h}" rx="3" fill="${color}" opacity="0.85">
+                    <title>Patient ${p.patient_id} (Rank #${p.rank})&#10;Priority Score: ${p.priority_score.toFixed(1)}&#10;Severity: ${p.severity}</title>
+                </rect>
+                <text x="${x + barWidth/2}" y="78" font-size="8" fill="#64748b" text-anchor="middle" font-weight="600">#${p.rank}</text>
+            </g>
+        `;
     });
+
+    svg += `</svg>`;
+    container.innerHTML = svg;
 }
 
-async function loadAttentionSignals() {
-    const container = document.getElementById("attention-signals-container");
-    if (!container) return;
-    container.innerHTML = `<p style="font-size: 12px; color: var(--text-secondary);">Scanning CareGrid state for attention signals...</p>`;
-    try {
-        const res  = await fetch("/api/intelligence/attention");
-        const data = await res.json();
+// CHART 5: QUEUE COMPOSITION DONUT CHART
+function renderQueueCompositionChart(patients) {
+    const container = document.getElementById("chart-queue-composition");
+    if (!container || !patients) return;
 
-        if (data.status !== "success") {
-            container.innerHTML = `<p style="font-size:12px; color:var(--text-muted);">ATTENTION SIGNALS UNAVAILABLE</p>`;
-            return;
-        }
+    const criticalCount = patients.filter(p => p.severity >= 70.0).length;
+    const waitingCount = patients.filter(p => p.patient_status === "Waiting").length;
+    const admittedCount = patients.filter(p => p.patient_status === "Admitted").length;
+    const total = patients.length || 1;
 
-        if (!data.signals || data.signals.length === 0) {
-            container.innerHTML = `<div class="attention-no-signals">NO SIGNIFICANT ATTENTION SIGNALS — Queue operating within normal parameters</div>`;
-            return;
-        }
+    const critPct = criticalCount / total;
+    const waitPct = waitingCount / total;
+    const admPct = admittedCount / total;
 
-        const typeLabels = {
-            near_tie:              "NEAR TIE",
-            major_rank_change:     "MAJOR RANK CHANGE",
-            waiting_time_attention:"WAITING-TIME ATTENTION",
-            critical_queue_load:   "CRITICAL QUEUE LOAD"
-        };
-
-        container.innerHTML = data.signals.map((sig, idx) => `
-            <div class="attention-signal-card severity-${sig.severity}" id="attention-sig-${idx}">
-                <div class="attention-signal-type">${typeLabels[sig.type] || sig.type}</div>
-                <div class="attention-signal-msg">${sig.message}</div>
-                <div class="attention-signal-footer">
-                    <span style="font-size:10px; color:var(--text-muted);">SOURCE: CareGrid Current State</span>
-                    <button class="v31-action-btn" style="padding:4px 10px; font-size:9px;"
-                        onclick="explainSignal(${idx})">WHY IS THIS FLAGGED?</button>
+    const html = `
+        <div style="display: flex; align-items: center; justify-content: space-around; width: 100%; height: 100%;">
+            <svg width="80" height="80" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="14" fill="transparent" stroke="#e2e8f0" stroke-width="4.5"/>
+                <circle cx="18" cy="18" r="14" fill="transparent" stroke="#ef4444" stroke-width="4.5" stroke-dasharray="${critPct * 88} 88" stroke-dashoffset="0" transform="rotate(-90 18 18)"/>
+                <circle cx="18" cy="18" r="14" fill="transparent" stroke="#f59e0b" stroke-width="4.5" stroke-dasharray="${waitPct * 88} 88" stroke-dashoffset="-${critPct * 88}" transform="rotate(-90 18 18)"/>
+                <circle cx="18" cy="18" r="14" fill="transparent" stroke="#10b981" stroke-width="4.5" stroke-dasharray="${admPct * 88} 88" stroke-dashoffset="-${(critPct + waitPct) * 88}" transform="rotate(-90 18 18)"/>
+                <text x="18" y="16.5" font-size="6.5" font-weight="800" fill="#0f172a" text-anchor="middle">3.6K</text>
+                <text x="18" y="22" font-size="4.5" font-weight="600" fill="#64748b" text-anchor="middle">TOTAL</text>
+            </svg>
+            <div style="display: flex; flex-direction: column; gap: 4px; font-size: 10px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #ef4444; display: inline-block;"></span>
+                    <span style="color: #475569; font-weight: 600;">Critical (${criticalCount})</span>
                 </div>
-                <div class="attention-explain-response" id="attention-explain-${idx}" style="display:none; margin-top:8px; font-size:11px; font-family:var(--font-mono); color:#1e293b; white-space:pre-wrap; background:#fff; padding:8px; border-radius:6px; border:1px solid #e2e8f0;"></div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; display: inline-block;"></span>
+                    <span style="color: #475569; font-weight: 600;">Waiting (${waitingCount})</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+                    <span style="color: #475569; font-weight: 600;">Admitted (${admittedCount})</span>
+                </div>
             </div>
-        `).join("");
-
-        // Store signals for explain
-        window._attentionSignals = data.signals;
-
-    } catch (err) {
-        console.error("Attention signals error:", err);
-        container.innerHTML = `<p style="font-size:12px; color:var(--text-muted);">ATTENTION SIGNALS UNAVAILABLE</p>`;
-    }
+        </div>
+    `;
+    container.innerHTML = html;
 }
 
-async function explainSignal(idx) {
-    if (!window._attentionSignals || !window._attentionSignals[idx]) return;
-    const signal     = window._attentionSignals[idx];
-    const responseEl = document.getElementById(`attention-explain-${idx}`);
-    if (!responseEl) return;
+// CHART 2: PATIENT PRIORITY COMPONENT BREAKDOWN (Horizontal Bar Chart)
+function renderPatientBreakdownChart(patient) {
+    const container = document.getElementById("chart-patient-breakdown");
+    if (!container || !patient) return;
 
-    responseEl.style.display = "block";
-    responseEl.textContent = "Querying CareGrid Intelligence…";
+    const weights = { severity: 0.50, survival: 0.30, waiting: 0.20 };
+    const sevContrib  = +(patient.severity * weights.severity).toFixed(1);
+    const survContrib = +(patient.survival_likelihood * weights.survival).toFixed(1);
+    const waitRaw     = Math.min(100.0, patient.waiting_time_minutes / 1.2);
+    const waitContrib = +(waitRaw * weights.waiting).toFixed(1);
 
-    try {
-        const res  = await fetch("/api/intelligence/explain-signal", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({signal})
-        });
-        const data = await res.json();
-        responseEl.textContent = data.answer || "INTELLIGENCE UNAVAILABLE";
-    } catch (err) {
-        responseEl.textContent = "CAREGRID INTELLIGENCE TEMPORARILY UNAVAILABLE";
-    }
+    const maxContrib = 50.0;
+    const sevPct  = (sevContrib / maxContrib) * 100;
+    const survPct = (survContrib / maxContrib) * 100;
+    const waitPct = (waitContrib / maxContrib) * 100;
+
+    const html = `
+        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 10.5px;">
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-weight: 600; color: #334155;">
+                    <span>Severity (SOFA Derived)</span>
+                    <span style="font-family: var(--font-mono); color: #ef4444; font-weight: 700;">+${sevContrib} pts</span>
+                </div>
+                <div style="height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                    <div style="height: 100%; width: ${sevPct}%; background: #ef4444; border-radius: 3px;"></div>
+                </div>
+            </div>
+
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-weight: 600; color: #334155;">
+                    <span>Survival Likelihood</span>
+                    <span style="font-family: var(--font-mono); color: #f59e0b; font-weight: 700;">+${survContrib} pts</span>
+                </div>
+                <div style="height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                    <div style="height: 100%; width: ${survPct}%; background: #f59e0b; border-radius: 3px;"></div>
+                </div>
+            </div>
+
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-weight: 600; color: #334155;">
+                    <span>Waiting Duration Equity</span>
+                    <span style="font-family: var(--font-mono); color: #3b82f6; font-weight: 700;">+${waitContrib} pts</span>
+                </div>
+                <div style="height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                    <div style="height: 100%; width: ${waitPct}%; background: #3b82f6; border-radius: 3px;"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    container.innerHTML = html;
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// INTELLIGENCE TAB — Route suggested questions 4-6 through V3.3/V3.5
-// ══════════════════════════════════════════════════════════════════════════════
+// CHART 3: PATIENT COMPARISON GROUPED BAR CHART
+async function openPatientComparison(pidA, pidB) {
+    const modal = document.getElementById("patient-comparison-modal");
+    const grid = document.getElementById("comparison-cards-grid");
+    const title = document.getElementById("comparison-modal-title");
+    const text = document.getElementById("comparison-explain-text");
 
-function setupIntelligenceTabRouting() {
-    // btn-q4: What changed recently? → V3.5 audit summary
-    const q4 = document.getElementById("btn-q4");
-    if (q4) {
-        q4.addEventListener("click", async () => {
-            document.getElementById("intel-answer-text").textContent = "Loading audit summary…";
-            try {
-                const res  = await fetch("/api/intelligence/audit-summary", {
-                    method: "POST", headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({limit: 10})
-                });
-                const data = await res.json();
-                document.getElementById("intel-answer-text").textContent = data.answer || "AUDIT INFORMATION UNAVAILABLE";
-                document.getElementById("intel-source-tag").textContent = `SOURCE: ${data.source || "CareGrid Audit Log"}`;
-                document.getElementById("intel-evidence-box").style.display = "none";
-            } catch (e) {
-                document.getElementById("intel-answer-text").textContent = "AUDIT INFORMATION UNAVAILABLE";
-            }
-        });
+    if (!modal) return;
+
+    let pA = currentPatients.find(p => p.patient_id === pidA);
+    let pB = currentPatients.find(p => p.patient_id === pidB);
+
+    if (!pA) {
+        try {
+            const resA = await fetch(`/api/patients/${pidA}`);
+            const dataA = await resA.json();
+            if (dataA.status === "success") pA = dataA.patient;
+        } catch (e) {}
     }
 
-    // btn-q5: New critical patient → V3.3 whatif
-    const q5 = document.getElementById("btn-q5");
-    if (q5) {
-        q5.addEventListener("click", async () => {
-            const ansEl = document.getElementById("intel-answer-text");
-            ansEl.textContent = "Interpreting scenario…";
-            const res  = await fetch("/api/intelligence/whatif", {
-                method: "POST", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({question: "What happens if a new critical patient enters?"})
-            });
-            const data = await res.json();
-            if (data.status === "ready") {
-                ansEl.textContent = `Scenario: ${data.scenario.description}\n\nUse the patient detail WHAT-IF tab to run this simulation against the live CareGrid engine.`;
-            } else {
-                ansEl.textContent = data.message || "Scenario not supported.";
-            }
-            document.getElementById("intel-source-tag").textContent = "SOURCE: CareGrid Intelligence";
-        });
+    if (!pB) {
+        try {
+            const resB = await fetch(`/api/patients/${pidB}`);
+            const dataB = await resB.json();
+            if (dataB.status === "success") pB = dataB.patient;
+        } catch (e) {}
     }
 
-    // btn-q6: Discharge top patient → V3.3 whatif
-    const q6 = document.getElementById("btn-q6");
-    if (q6) {
-        q6.addEventListener("click", async () => {
-            const ansEl = document.getElementById("intel-answer-text");
-            ansEl.textContent = "Interpreting scenario…";
-            const res  = await fetch("/api/intelligence/whatif", {
-                method: "POST", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({question: "What happens if the top patient is discharged?"})
-            });
-            const data = await res.json();
-            if (data.status === "ready") {
-                ansEl.textContent = `Scenario: ${data.scenario.description}\n\nUse the patient detail WHAT-IF tab to run this simulation.`;
-            } else {
-                ansEl.textContent = data.message || "Scenario not supported.";
-            }
-            document.getElementById("intel-source-tag").textContent = "SOURCE: CareGrid Intelligence";
-        });
+    if (!pA || !pB) return;
+
+    if (title) title.textContent = `PATIENT COMPARISON: ${pA.patient_id} VS ${pB.patient_id}`;
+
+    if (grid) {
+        grid.innerHTML = `
+            <div style="background: #f8fafc; border: 1px solid #38bdf8; border-radius: 10px; padding: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #0284c7;">PATIENT ${pA.patient_id}</span>
+                    <span class="rank-badge rank-1">RANK #${pA.rank}</span>
+                </div>
+                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">${pA.priority_score.toFixed(1)} <span style="font-size: 10px; color: var(--text-muted);">PRIORITY</span></div>
+                <div style="font-size: 11px; color: #475569;">SOFA Severity: <strong>${pA.severity}</strong> | Survival: <strong>${pA.survival_likelihood}%</strong> | Wait: <strong>${pA.waiting_time_minutes} min</strong></div>
+            </div>
+
+            <div style="background: #f0fdf4; border: 1px solid #4ade80; border-radius: 10px; padding: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #059669;">PATIENT ${pB.patient_id}</span>
+                    <span class="rank-badge rank-1" style="background: #dcfce7; color: #166534;">RANK #${pB.rank}</span>
+                </div>
+                <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">${pB.priority_score.toFixed(1)} <span style="font-size: 10px; color: var(--text-muted);">PRIORITY</span></div>
+                <div style="font-size: 11px; color: #475569;">SOFA Severity: <strong>${pB.severity}</strong> | Survival: <strong>${pB.survival_likelihood}%</strong> | Wait: <strong>${pB.waiting_time_minutes} min</strong></div>
+            </div>
+        `;
     }
+
+    renderComparisonChart(pA, pB);
+
+    if (text) {
+        const gap = Math.abs(pA.priority_score - pB.priority_score).toFixed(1);
+        text.textContent = `Patient ${pA.patient_id} (Rank #${pA.rank}, Score ${pA.priority_score.toFixed(1)}) and Patient ${pB.patient_id} (Rank #${pB.rank}, Score ${pB.priority_score.toFixed(1)}) are separated by ${gap} priority points. Under CareGrid rules, Patient ${pA.rank < pB.rank ? pA.patient_id : pB.patient_id} holds higher priority due to higher SOFA organ failure severity contribution.`;
+    }
+
+    modal.classList.remove("hidden");
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// SHARED MODAL RESPONSE HELPERS
-// ══════════════════════════════════════════════════════════════════════════════
-function showModalIntelResponse(text, source) {
-    const panel = document.getElementById("v31-response-panel");
-    const textEl  = document.getElementById("v31-response-text");
-    const sourceEl = document.getElementById("v31-response-source");
-    const errEl  = document.getElementById("v31-error-panel");
-    if (panel)  { panel.style.display = "block"; }
-    if (textEl)   textEl.textContent   = text;
-    if (sourceEl) sourceEl.textContent = source || "—";
-    if (errEl)  errEl.style.display = "none";
+function closeComparisonModal() {
+    const modal = document.getElementById("patient-comparison-modal");
+    if (modal) modal.classList.add("hidden");
 }
 
-function showModalIntelError() {
-    const panel = document.getElementById("v31-response-panel");
-    const errEl = document.getElementById("v31-error-panel");
-    if (panel)  panel.style.display = "none";
-    if (errEl)  errEl.style.display = "block";
+function renderComparisonChart(patientA, patientB) {
+    const container = document.getElementById("chart-patient-comparison");
+    if (!container || !patientA || !patientB) return;
+
+    const metrics = [
+        { label: "Priority Score", valA: patientA.priority_score, valB: patientB.priority_score, max: 100 },
+        { label: "Severity (SOFA)", valA: patientA.severity, valB: patientB.severity, max: 100 },
+        { label: "Survival Potential (%)", valA: patientA.survival_likelihood, valB: patientB.survival_likelihood, max: 100 },
+        { label: "Wait Duration (min)", valA: Math.min(100, patientA.waiting_time_minutes / 1.5), valB: Math.min(100, patientB.waiting_time_minutes / 1.5), max: 100 }
+    ];
+
+    let html = `
+        <div style="display: flex; gap: 16px; margin-bottom: 8px; font-size: 11px; font-weight: 700;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 10px; height: 10px; background: #0284c7; border-radius: 2px;"></span>
+                <span style="color: #0284c7;">Patient ${patientA.patient_id} (Rank #${patientA.rank})</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 10px; height: 10px; background: #059669; border-radius: 2px;"></span>
+                <span style="color: #059669;">Patient ${patientB.patient_id} (Rank #${patientB.rank})</span>
+            </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 10.5px;">
+    `;
+
+    metrics.forEach(m => {
+        const pctA = Math.min(100, (m.valA / m.max) * 100);
+        const pctB = Math.min(100, (m.valB / m.max) * 100);
+
+        html += `
+            <div>
+                <div style="font-weight: 600; color: #475569; margin-bottom: 2px;">${m.label}</div>
+                <div style="display: flex; flex-direction: column; gap: 3px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="width: 40px; font-family: var(--font-mono); font-size: 10px; color: #0284c7; font-weight: 700;">${m.valA.toFixed(1)}</span>
+                        <div style="flex: 1; height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                            <div style="height: 100%; width: ${pctA}%; background: #0284c7; border-radius: 3px;"></div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="width: 40px; font-family: var(--font-mono); font-size: 10px; color: #059669; font-weight: 700;">${m.valB.toFixed(1)}</span>
+                        <div style="flex: 1; height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                            <div style="height: 100%; width: ${pctB}%; background: #059669; border-radius: 3px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+    container.innerHTML = html;
 }
-
-

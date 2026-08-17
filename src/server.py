@@ -14,6 +14,7 @@ from src.audit_logger import AuditLogger
 from src.event_engine import EventEngine
 from src.simulation_engine import SimulationEngine
 from src.intelligence_engine import IntelligenceEngine
+from src.attention_engine import AttentionEngine
 
 PORT = 8080
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -23,6 +24,8 @@ loader = DataLoader(base_dir=BASE_DIR)
 priority_engine = PriorityEngine(weight_severity=0.50, weight_survival=0.30, weight_waiting=0.20, near_tie_threshold=0.50)
 audit_logger = AuditLogger()
 event_engine = EventEngine(priority_engine=priority_engine, audit_logger=audit_logger)
+attention_engine = AttentionEngine()
+event_engine.attention_engine = attention_engine
 sim_engine = SimulationEngine(data_loader=loader, event_engine=event_engine)
 intelligence_engine = IntelligenceEngine(event_engine=event_engine, priority_engine=priority_engine)
 
@@ -168,14 +171,24 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
             snapshot = intelligence_engine.get_current_snapshot()
             self.send_json_response({"status": "success", "snapshot": snapshot})
 
-        elif path == "/api/intelligence/attention":
-            try:
-                res = intelligence_engine.get_attention_signals()
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Attention signals unavailable: {str(e)}"}, 500)
+        elif path == "/api/attention/major-changes":
+            threshold = int(parsed_url.query.split("threshold=")[1].split("&")[0]) if "threshold=" in parsed_url.query else 2
+            changes = intelligence_engine.detect_major_rank_changes(threshold=threshold)
+            self.send_json_response({"status": "success", "major_changes": changes, "count": len(changes)})
 
-
+        elif path == "/api/attention/signals":
+            signals = attention_engine.evaluate_attention_signals(event_engine, audit_logger)
+            self.send_json_response({
+                "status": "success",
+                "signals": signals,
+                "count": len(signals),
+                "thresholds": {
+                    "near_tie": attention_engine.near_tie_threshold,
+                    "major_rank_change": attention_engine.major_rank_change_threshold,
+                    "waiting_time": attention_engine.waiting_time_threshold,
+                    "critical_load": attention_engine.critical_load_threshold
+                }
+            })
 
         # Static UI Assets
         elif path == "/" or path == "/index.html":
@@ -229,59 +242,22 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
                     "message": f"CareGrid Patient Intelligence Unavailable: {str(e)}"
                 }, 500)
 
-        # V3.2 — Patient Comparison Intelligence
-        elif path == "/api/intelligence/compare":
-            pid_a = data.get("patient_id_a", "")
-            pid_b = data.get("patient_id_b", "")
-            if not pid_a or not pid_b:
-                self.send_json_response({"status": "error", "message": "patient_id_a and patient_id_b are required"}, 400)
-                return
+        elif path == "/api/intelligence/explain-major-change":
+            patient_id = data.get("patient_id")
             try:
-                res = intelligence_engine.compare_patients(pid_a=pid_a, pid_b=pid_b)
+                res = intelligence_engine.explain_major_rank_change(patient_id=patient_id)
                 self.send_json_response(res)
             except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Comparison failed: {str(e)}"}, 500)
+                self.send_json_response({"status": "error", "message": str(e)}, 500)
 
-        # V3.3 — What-If Interpretation (AI interprets; deterministic sim engine runs separately)
-        elif path == "/api/intelligence/whatif":
-            question   = data.get("question", "")
-            patient_id = data.get("patient_id", None)
-            try:
-                res = intelligence_engine.interpret_whatif(question=question, patient_id=patient_id)
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"What-If interpretation failed: {str(e)}"}, 500)
-
-        # V3.4 — Explain Simulation Result (Before/After)
-        elif path == "/api/intelligence/explain-simulation":
-            sim_result   = data.get("sim_result", {})
-            before_queue = data.get("before_queue", [])
-            try:
-                res = intelligence_engine.explain_simulation_result(
-                    sim_result=sim_result, before_queue=before_queue
-                )
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Simulation explanation failed: {str(e)}"}, 500)
-
-        # V3.5 — Audit Intelligence
-        elif path == "/api/intelligence/audit-summary":
-            patient_id = data.get("patient_id", None)
-            limit      = int(data.get("limit", 10))
-            try:
-                res = intelligence_engine.summarize_audit(patient_id=patient_id, limit=limit)
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Audit summary failed: {str(e)}"}, 500)
-
-        # V3.6 — Explain a specific attention signal
-        elif path == "/api/intelligence/explain-signal":
+        elif path == "/api/intelligence/explain-attention":
             signal = data.get("signal", {})
             try:
-                res = intelligence_engine.explain_attention_signal(signal=signal)
+                res = intelligence_engine.explain_attention_signal(signal)
                 self.send_json_response(res)
             except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Signal explanation failed: {str(e)}"}, 500)
+                self.send_json_response({"status": "error", "message": str(e)}, 500)
+
 
         elif path == "/api/priority-weights":
             try:

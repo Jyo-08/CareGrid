@@ -10,6 +10,7 @@ Rules:
 
 import os
 import json
+import re
 from typing import Dict, Any, List, Optional
 
 SYSTEM_PROMPT = """You are CareGrid Intelligence.
@@ -59,27 +60,20 @@ class IntelligenceEngine:
         }
         return snapshot
 
-    def ask(self, question: str) -> Dict[str, Any]:
-        """Process a V3.0 user question grounded strictly in CareGrid state."""
+    def ask(self, question: str, patient_id: Optional[str] = None) -> Dict[str, Any]:
+        """Process a user question grounded strictly in current CareGrid state with distinct intent routing."""
+        import re
         q_norm = question.strip().lower()
         snapshot = self.get_current_snapshot()
         top_p = snapshot["top_patient"]
+        all_patients = self.event_engine.get_ranked_patients()
 
-        # Default Evidence structure
-        evidence = {}
-        if top_p:
-            evidence = {
-                "patient_id": top_p["patient_id"],
-                "rank": top_p["rank"],
-                "priority_score": top_p["priority_score"],
-                "severity": top_p["severity"],
-                "sofa_score": top_p["sofa_score"],
-                "survival_likelihood": top_p["survival_likelihood"],
-                "waiting_time_minutes": top_p["waiting_time_minutes"],
-                "severity_contribution": top_p.get("severity_contribution", round(top_p["severity"] * snapshot["weights"]["weight_severity"], 1)),
-                "survival_contribution": top_p.get("survival_contribution", round(top_p["survival_likelihood"] * snapshot["weights"]["weight_survival"], 1)),
-                "waiting_contribution": top_p.get("waiting_contribution", round(min(100, top_p["waiting_time_minutes"] / 1.2) * snapshot["weights"]["weight_waiting"], 1))
-            }
+        match = re.search(r'P-?\d+', question, re.IGNORECASE)
+        mentioned_pid = None
+        if match:
+            raw_m = match.group(0).upper()
+            mentioned_pid = raw_m if raw_m.startswith("P-") else f"P-{raw_m[1:]}"
+        target_pid = mentioned_pid or patient_id
 
         context_summary = {
             "queue_size": snapshot["total_patients_in_queue"],
@@ -89,17 +83,49 @@ class IntelligenceEngine:
             "available_beds": snapshot["available_beds"]
         }
 
-        # 1. QUESTION: Why is the top-ranked patient #1?
-        if "why" in q_norm or "#1" in q_norm or "top" in q_norm:
+        evidence = {}
+        if top_p:
+            weights = snapshot["weights"]
+            evidence = {
+                "patient_id": top_p["patient_id"],
+                "rank": top_p["rank"],
+                "priority_score": top_p["priority_score"],
+                "severity": top_p["severity"],
+                "sofa_score": top_p["sofa_score"],
+                "survival_likelihood": top_p["survival_likelihood"],
+                "waiting_time_minutes": top_p["waiting_time_minutes"],
+                "severity_contribution": round(top_p["severity"] * weights["weight_severity"], 1),
+                "survival_contribution": round(top_p["survival_likelihood"] * snapshot["weights"]["weight_survival"], 1),
+                "waiting_contribution": round(min(100.0, top_p["waiting_time_minutes"] / 1.2) * snapshot["weights"]["weight_waiting"], 1)
+            }
+
+        # ----------------------------------------------------------------------
+        # V3.5 AUDIT INTELLIGENCE QUESTIONS
+        # ----------------------------------------------------------------------
+        if any(w in q_norm for w in ["what changed", "recent changes", "audit", "history", "moved", "re-ranking", "trace"]):
+            return self.ask_audit(question, patient_id=target_pid)
+
+        # ----------------------------------------------------------------------
+        # V3.5 SMALL ATTENTION FOUNDATION: MAJOR RANK CHANGE / WHY FLAGGED
+        # ----------------------------------------------------------------------
+        if any(w in q_norm for w in ["flagged", "major rank", "attention"]):
+            return self.explain_major_rank_change(patient_id=target_pid)
+
+        # ----------------------------------------------------------------------
+        # CATEGORY 1: TOP PATIENT EXPLANATION (#1)
+        # ----------------------------------------------------------------------
+        if ("#1" in q_norm or "top" in q_norm or "highest" in q_norm or "first" in q_norm) and ("why" in q_norm or "explain" in q_norm or "reason" in q_norm or "ranked" in q_norm or "get" in q_norm or "one" in q_norm):
             if not top_p:
                 answer = "No patients are currently in the CareGrid queue."
             else:
                 answer = (
-                    f"Patient {top_p['patient_id']} is ranked #1 with an official priority score of "
-                    f"{top_p['priority_score']:.1f}/100. The primary score drive is a SOFA organ failure severity of "
-                    f"{top_p['severity']:.1f} (SOFA raw score: {top_p['sofa_score']}), contributing {evidence['severity_contribution']:.1f} points. "
-                    f"Survival likelihood of {top_p['survival_likelihood']:.1f}% adds {evidence['survival_contribution']:.1f} points, "
-                    f"and waiting duration equity ({top_p['waiting_time_minutes']} min pending) adds {evidence['waiting_contribution']:.1f} points."
+                    f"EXPLANATION FOR TOP-RANKED PATIENT #{top_p['rank']} ({top_p['patient_id']})\n\n"
+                    f"Patient {top_p['patient_id']} holds Rank #1 with an official CareGrid priority score of {top_p['priority_score']:.1f} / 100.0.\n\n"
+                    f"KEY CONTRIBUTING FACTORS:\n"
+                    f"• Severity (SOFA-derived score {top_p['severity']:.1f}): +{evidence['severity_contribution']:.1f} pts (50% weight)\n"
+                    f"• Survival Likelihood ({top_p['survival_likelihood']:.1f}%): +{evidence['survival_contribution']:.1f} pts (30% weight)\n"
+                    f"• Waiting Duration Equity ({top_p['waiting_time_minutes']} min): +{evidence['waiting_contribution']:.1f} pts (20% weight)\n\n"
+                    f"SOFA organ failure severity is currently the primary driver securing position #1 for Patient {top_p['patient_id']}."
                 )
 
             return {
@@ -107,17 +133,21 @@ class IntelligenceEngine:
                 "question": question,
                 "answer": answer,
                 "evidence": evidence,
-                "source": "CareGrid Current Priority State",
+                "source": "CareGrid Priority Engine | CareGrid Current State",
                 "context_summary": context_summary
             }
 
-        # 2. QUESTION: Summarize the current queue.
-        elif "summarize" in q_norm or "summary" in q_norm or "queue" in q_norm:
+        # ----------------------------------------------------------------------
+        # CATEGORY 2: QUEUE SUMMARY
+        # ----------------------------------------------------------------------
+        elif "summarize" in q_norm or "summary" in q_norm or "everyone" in q_norm or "happening" in q_norm or ("queue" in q_norm and not "this" in q_norm):
             answer = (
-                f"CareGrid is currently tracking {snapshot['total_patients_in_queue']} patients. "
-                f"There are {snapshot['critical_patients_count']} critical severity patients (severity ≥ 70.0) awaiting bed arbitration. "
-                f"Top-ranked patient is {top_p['patient_id']} with priority score {top_p['priority_score']:.1f}/100. "
-                f"ICU capacity status: {snapshot['occupied_beds']}/{snapshot['total_beds']} beds occupied ({snapshot['available_beds']} beds available)."
+                f"CAREGRID ICU QUEUE SUMMARY\n\n"
+                f"• Active Candidate Population: {snapshot['total_patients_in_queue']} total patients currently under arbitration.\n"
+                f"• Critical Severity Cohort: {snapshot['critical_patients_count']} patients with SOFA-derived severity ≥ 70.0.\n"
+                f"• Top Priority Candidate: Patient {top_p['patient_id']} (Rank #1, Priority Score: {top_p['priority_score']:.1f}).\n"
+                f"• ICU Capacity State: {snapshot['occupied_beds']}/{snapshot['total_beds']} beds occupied ({snapshot['available_beds']} beds available for allocation).\n"
+                f"• Engine Configuration: 50% Severity / 30% Survival Likelihood / 20% Waiting Equity."
             )
 
             return {
@@ -129,13 +159,17 @@ class IntelligenceEngine:
                 "context_summary": context_summary
             }
 
-        # 3. QUESTION: What is the current priority state?
-        elif "state" in q_norm or "priority" in q_norm or "status" in q_norm or "current" in q_norm:
+        # ----------------------------------------------------------------------
+        # CATEGORY 3: PRIORITY STATE & WEIGHTS
+        # ----------------------------------------------------------------------
+        elif "priority state" in q_norm or "weights" in q_norm or "scoring formula" in q_norm or ("state" in q_norm and not "patient" in q_norm):
             answer = (
-                f"CareGrid Priority Engine is ONLINE running deterministic scoring weights "
-                f"({int(snapshot['weights']['weight_severity']*100)}% Severity, {int(snapshot['weights']['weight_survival']*100)}% Survival, {int(snapshot['weights']['weight_waiting']*100)}% Wait). "
-                f"Highest priority candidate: Patient {top_p['patient_id']} (Priority Score: {top_p['priority_score']:.1f}). "
-                f"Queue population: {snapshot['total_patients_in_queue']} total patients ({snapshot['critical_patients_count']} critical)."
+                f"CAREGRID PRIORITY ENGINE STATE\n\n"
+                f"• Status: ONLINE & DETERMINISTICALLY ACTIVE\n"
+                f"• Scoring Formula: Score = (Severity × 0.50) + (Survival × 0.30) + (Wait × 0.20)\n"
+                f"• Top Candidate Score: {top_p['priority_score']:.1f} (Patient {top_p['patient_id']})\n"
+                f"• Evaluated Population: {snapshot['total_patients_in_queue']} active records ({snapshot['critical_patients_count']} critical)\n"
+                f"• Provenance: All priority scores and rank positions are generated deterministically by CareGrid Priority Engine."
             )
 
             return {
@@ -143,26 +177,59 @@ class IntelligenceEngine:
                 "question": question,
                 "answer": answer,
                 "evidence": evidence,
-                "source": "CareGrid Current Priority State",
+                "source": "CareGrid Priority Engine",
                 "context_summary": context_summary
             }
 
-        # Fallback for generic/unrecognized query:
-        else:
-            answer = (
-                f"CareGrid Intelligence is grounded strictly in current engine state. "
-                f"Current top candidate is Patient {top_p['patient_id']} (Priority Score: {top_p['priority_score']:.1f}) out of {snapshot['total_patients_in_queue']} total records. "
-                f"Please select one of the suggested questions or ask about queue summary, priority state, or rank #1 explanation."
-            )
+        # ----------------------------------------------------------------------
+        # CATEGORY 4: PATIENT COMPARISON / DIFFERENCE BETWEEN TOP TWO
+        # ----------------------------------------------------------------------
+        elif "difference" in q_norm or "compare" in q_norm or "top two" in q_norm or "versus" in q_norm or "vs" in q_norm:
+            if len(all_patients) >= 2:
+                res = self.compare_patients(all_patients[0].patient_id, all_patients[1].patient_id)
+                return {
+                    "status": "success",
+                    "question": question,
+                    "answer": res.get("explanation", ""),
+                    "evidence": evidence,
+                    "source": "CareGrid Priority Engine | CareGrid Current State",
+                    "context_summary": context_summary
+                }
 
-            return {
-                "status": "success",
-                "question": question,
-                "answer": answer,
-                "evidence": evidence,
-                "source": "CareGrid Current Priority State",
-                "context_summary": context_summary
-            }
+        # ----------------------------------------------------------------------
+        # CATEGORY 5: PATIENT-SPECIFIC QUERY / "THIS PATIENT" / "CONTRIBUTES MOST"
+        # ----------------------------------------------------------------------
+        if target_pid or "this patient" in q_norm or "patient" in q_norm or "contribute" in q_norm or "driver" in q_norm or "why" in q_norm:
+            pid = target_pid or (top_p["patient_id"] if top_p else None)
+            if pid:
+                mode = "drivers" if ("contribute" in q_norm or "driver" in q_norm or "most" in q_norm) else "why_ranked"
+                res = self.ask_about_patient(patient_id=pid, mode=mode, free_question=question)
+                return {
+                    "status": "success",
+                    "question": question,
+                    "answer": res.get("answer", ""),
+                    "evidence": evidence,
+                    "source": res.get("source", "CareGrid Current Patient State"),
+                    "context_summary": context_summary
+                }
+
+        answer = (
+            f"CareGrid Intelligence Context for query '{question}':\n\n"
+            f"• Current Queue Population: {snapshot['total_patients_in_queue']} records under active arbitration.\n"
+            f"• Highest Priority Candidate: Patient {top_p['patient_id']} (Rank #1, Priority Score: {top_p['priority_score']:.1f}).\n"
+            f"• Configured Weights: 50% Severity / 30% Survival Likelihood / 20% Waiting Equity.\n"
+            f"• Available Beds: {snapshot['available_beds']} beds.\n\n"
+            f"You can ask about queue summary, priority state, top patient explanation, or recent audit changes."
+        )
+
+        return {
+            "status": "success",
+            "question": question,
+            "answer": answer,
+            "evidence": evidence,
+            "source": "CareGrid Current Priority State",
+            "context_summary": context_summary
+        }
 
     def build_patient_context(self, patient_id: str) -> Optional[Dict[str, Any]]:
         """Build structured context for a specific patient from live CareGrid state."""
@@ -363,402 +430,207 @@ class IntelligenceEngine:
         }
 
     # ──────────────────────────────────────────────────────────────────────
-    # V3.2 — PATIENT COMPARISON INTELLIGENCE
+    # V3.5 — AUDIT INTELLIGENCE & SMALL ATTENTION FOUNDATION
     # ──────────────────────────────────────────────────────────────────────
 
-    def compare_patients(self, pid_a: str, pid_b: str) -> Dict[str, Any]:
-        """Compare two actual CareGrid patients by rank, score, and contributions."""
-        ctx_a = self.build_patient_context(pid_a)
-        ctx_b = self.build_patient_context(pid_b)
+    def ask_audit(self, question: str, patient_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Process V3.5 Audit Intelligence query grounded strictly in live Audit Log events.
+        """
+        q_norm = question.strip().lower()
+        audit_events = self.event_engine.audit_logger.get_events(limit=20) if hasattr(self.event_engine, "audit_logger") else []
 
-        if not ctx_a:
-            return {"status": "error", "message": f"Patient {pid_a} not found in queue.", "source": "CareGrid Priority Engine"}
-        if not ctx_b:
-            return {"status": "error", "message": f"Patient {pid_b} not found in queue.", "source": "CareGrid Priority Engine"}
+        match = re.search(r'P-?\d+', question, re.IGNORECASE)
+        mentioned_pid = match.group(0).upper() if match else None
+        if mentioned_pid and not mentioned_pid.startswith("P-"):
+            mentioned_pid = f"P-{mentioned_pid[1:]}"
+        target_pid = mentioned_pid or patient_id
 
-        pa, pb = ctx_a["patient"], ctx_b["patient"]
-        ca, cb = ctx_a["contributions"], ctx_b["contributions"]
-        wa = ctx_a["weights"]
+        # 1. PATIENT-SPECIFIC AUDIT / WHY DID PATIENT MOVE
+        if target_pid or "this patient" in q_norm or "moved" in q_norm:
+            pid = target_pid or (audit_events[0]["patient_id"] if audit_events and audit_events[0].get("patient_id") else None)
+            patient_evts = [e for e in audit_events if e.get("patient_id") == pid] if pid else []
 
-        score_diff = round(abs(pa["priority_score"] - pb["priority_score"]), 2)
-        higher = pa if pa["rank"] < pb["rank"] else pb
-        lower  = pb if pa["rank"] < pb["rank"] else pa
-        c_hi   = ca if pa["rank"] < pb["rank"] else cb
-        c_lo   = cb if pa["rank"] < pb["rank"] else ca
+            lines = [f"PATIENT AUDIT TRACE — PATIENT {pid or 'N/A'}\n"]
+            lines.append("RECENT ACTIVITY")
 
-        diffs = {
-            "severity_contribution":  abs(ca["severity_contribution"]  - cb["severity_contribution"]),
-            "survival_contribution":  abs(ca["survival_contribution"]  - cb["survival_contribution"]),
-            "waiting_contribution":   abs(ca["waiting_contribution"]   - cb["waiting_contribution"]),
-        }
-        factor_labels = {
-            "severity_contribution":  "Severity",
-            "survival_contribution":  "Survival Likelihood",
-            "waiting_contribution":   "Waiting Duration",
-        }
-        biggest_diff_key   = max(diffs, key=diffs.get)
-        biggest_diff_label = factor_labels[biggest_diff_key]
+            if not patient_evts:
+                lines.append("  No recent activity recorded for this patient in the active audit log.")
+                lines.append("\nRANK CHANGE TRACE")
+                lines.append("  Trigger information is unavailable in the current audit data.")
+            else:
+                for e in patient_evts[:5]:
+                    lines.append(f"  • [{e.get('timestamp', 'N/A')[:19]}] {e.get('event_type', 'EVENT')}")
+                    if e.get("previous_rank") and e.get("new_rank"):
+                        lines.append(f"    Rank Shift: #{e['previous_rank']} → #{e['new_rank']} ({'+' if e.get('rank_delta',0)>0 else ''}{e.get('rank_delta',0)} positions)")
+                    if e.get("reason"):
+                        lines.append(f"    Reason: {e['reason']}")
 
-        explanation = (
-            f"WHY PATIENT {higher['patient_id']} IS CURRENTLY ABOVE {lower['patient_id']}\n\n"
-            f"Under the current CareGrid scoring and ranking rules:\n"
-            f"  {higher['patient_id']}: Rank #{higher['rank']} — Priority Score {higher['priority_score']}\n"
-            f"  {lower['patient_id']}:  Rank #{lower['rank']} — Priority Score {lower['priority_score']}\n\n"
-            f"PRIORITY DIFFERENCE: {score_diff} points\n\n"
-            f"LARGEST CONTRIBUTING DIFFERENCE: {biggest_diff_label}\n"
-            f"  {higher['patient_id']}: +{c_hi[biggest_diff_key]} pts\n"
-            f"  {lower['patient_id']}:  +{c_lo[biggest_diff_key]} pts\n"
-            f"  Gap: {diffs[biggest_diff_key]:.1f} pts\n\n"
-            f"SCORE CONTRIBUTION COMPARISON\n"
-            f"  {'Factor':<25} {higher['patient_id']:<14} {lower['patient_id']}\n"
-            f"  {'Severity':<25} +{c_hi['severity_contribution']:<14} +{c_lo['severity_contribution']}\n"
-            f"  {'Survival Likelihood':<25} +{c_hi['survival_contribution']:<14} +{c_lo['survival_contribution']}\n"
-            f"  {'Waiting Duration':<25} +{c_hi['waiting_contribution']:<14} +{c_lo['waiting_contribution']}\n\n"
-            f"Weighting active: {wa['weight_severity_pct']}% Severity / {wa['weight_survival_pct']}% Survival / {wa['weight_waiting_pct']}% Waiting\n\n"
-            f"SOURCE\nCareGrid Priority Engine"
-        )
+                latest = patient_evts[0]
+                lines.append("\nRANK CHANGE TRACE")
+                lines.append("  TRIGGER")
+                lines.append(f"  ↓ {latest.get('event_type', 'System Action')}")
+                lines.append("  INPUT CHANGE")
+                lines.append(f"  ↓ {latest.get('reason', 'Parameter / Queue update')}")
+                lines.append("  PRIORITY RECALCULATION")
+                lines.append("  ↓ CareGrid Priority Engine executed 50/30/20 deterministic scoring")
+                lines.append("  RANK CHANGE")
+                if latest.get("previous_rank") and latest.get("new_rank"):
+                    lines.append(f"  ↓ #{latest['previous_rank']} → #{latest['new_rank']}")
+                else:
+                    lines.append("  ↓ Evaluated position updated")
+                lines.append("  ARBITRATION")
+                lines.append("  ↓ ICU Bed Arbitration Engine confirmed position")
+                lines.append("  AUDIT RECORD")
+                lines.append(f"  ↓ Event {latest.get('event_id', 'EVT')} logged to audit trail")
 
+            lines.append("\nSOURCE\nCareGrid Audit Log | CareGrid Priority Engine")
+            return {
+                "status": "success",
+                "question": question,
+                "answer": "\n".join(lines),
+                "source": "CareGrid Audit Log | CareGrid Priority Engine"
+            }
+
+        # 2. GENERAL RECENT AUDIT SUMMARY ("What changed recently?")
+        lines = ["RECENT CAREGRID AUDIT CHANGES\n"]
+        if not audit_events:
+            lines.append("NO RECENT AUDIT EVENTS RECORDED IN THE SYSTEM.")
+        else:
+            for e in audit_events[:8]:
+                ts = e.get("timestamp", "")[:19].replace("T", " ")
+                pid_str = f"P-{e['patient_id']}" if e.get("patient_id") and not str(e.get("patient_id")).startswith("P-") else (e.get("patient_id") or "QUEUE")
+                lines.append(f"• {ts} | {pid_str}")
+                lines.append(f"  Event: {e.get('event_type', 'State Change')}")
+                if e.get("previous_rank") and e.get("new_rank"):
+                    lines.append(f"  Rank: #{e['previous_rank']} → #{e['new_rank']}")
+                if e.get("reason"):
+                    lines.append(f"  Details: {e['reason']}")
+                lines.append("")
+
+        lines.append("SOURCE\nCareGrid Audit Log")
         return {
             "status": "success",
-            "patient_a": {**pa, "contributions": ca},
-            "patient_b": {**pb, "contributions": cb},
-            "higher_ranked": higher["patient_id"],
-            "lower_ranked":  lower["patient_id"],
-            "score_difference": score_diff,
-            "biggest_diff_factor": biggest_diff_label,
-            "factor_diffs": {factor_labels[k]: round(v, 2) for k, v in diffs.items()},
-            "explanation": explanation,
-            "source": "CareGrid Priority Engine",
+            "question": question,
+            "answer": "\n".join(lines),
+            "source": "CareGrid Audit Log"
         }
 
-    # ──────────────────────────────────────────────────────────────────────
-    # V3.3 / V3.4 — WHAT-IF INTELLIGENCE & BEFORE/AFTER EXPLANATION
-    # ──────────────────────────────────────────────────────────────────────
+    def detect_major_rank_changes(self, threshold: int = 2) -> List[Dict[str, Any]]:
+        """
+        V3.5 Small Attention Foundation: Deterministic Major Rank Change detection.
+        Scans recent audit history for rank position shifts >= threshold.
+        """
+        audit_events = self.event_engine.audit_logger.get_events(limit=30) if hasattr(self.event_engine, "audit_logger") else []
+        major_changes = []
+        seen_pids = set()
 
-    def interpret_whatif(self, question: str, patient_id: str = None) -> Dict[str, Any]:
-        """Parse a natural-language what-if question and return a structured scenario descriptor."""
-        import re
-        q = question.lower()
+        for evt in audit_events:
+            delta = evt.get("rank_delta", 0)
+            pid = evt.get("patient_id")
+            if pid and abs(delta) >= threshold and pid not in seen_pids:
+                seen_pids.add(pid)
+                major_changes.append({
+                    "patient_id": pid,
+                    "previous_rank": evt.get("previous_rank"),
+                    "new_rank": evt.get("new_rank"),
+                    "rank_delta": delta,
+                    "timestamp": evt.get("timestamp"),
+                    "event_type": evt.get("event_type"),
+                    "reason": evt.get("reason"),
+                    "threshold": threshold
+                })
+        return major_changes
 
-        if "new critical" in q or "new patient" in q or "enters" in q or "arriving" in q:
-            return {
-                "status": "ready",
-                "scenario": {"action": "new_critical_patient", "patient_id": None,
-                             "description": "Simulate a new critical patient entering the CareGrid queue"},
-                "source": "CareGrid Intelligence",
-            }
+    def explain_major_rank_change(self, patient_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Grounded AI explanation of why a Major Rank Change attention indicator was surfaced.
+        """
+        changes = self.detect_major_rank_changes()
+        target = next((c for c in changes if c["patient_id"] == patient_id), None) if patient_id else (changes[0] if changes else None)
 
-        if "discharge" in q or "leave" in q or "remov" in q or "exit" in q:
-            return {
-                "status": "ready",
-                "scenario": {"action": "discharge_top", "patient_id": None,
-                             "description": "Simulate the top-ranked patient being discharged from the queue"},
-                "source": "CareGrid Intelligence",
-            }
+        lines = ["ATTENTION EXPLANATION: MAJOR RANK CHANGE\n"]
+        lines.append("WHY IS THIS FLAGGED?")
 
-        if "time" in q or "wait" in q or "advance" in q or "clock" in q or "delay" in q:
-            match = re.search(r'(\d+)\s*min', q)
-            minutes = int(match.group(1)) if match else 30
-            return {
-                "status": "ready",
-                "scenario": {"action": "advance_time", "minutes": minutes, "patient_id": None,
-                             "description": f"Advance the CareGrid waiting-time clock by {minutes} minutes"},
-                "source": "CareGrid Intelligence",
-            }
-
-        if any(w in q for w in ["severity", "spike", "worsen", "deterior", "critical", "sofa"]):
-            target = patient_id
-            if not target:
-                m = re.search(r'p-?\d+', question, re.IGNORECASE)
-                if m:
-                    target = m.group(0).upper().replace("P", "P-") if not m.group(0).startswith("P-") else m.group(0).upper()
-            return {
-                "status": "ready",
-                "scenario": {"action": "severity_spike",
-                             "patient_id": target,
-                             "description": f"Simulate a severity spike for patient {target or '(selected patient)'}"},
-                "source": "CareGrid Intelligence",
-            }
-
-        return {
-            "status": "unsupported",
-            "message": (
-                "CareGrid cannot simulate that scenario with the currently available simulation engine.\n"
-                "Supported scenarios: new critical patient | discharge top patient | advance wait clock | severity spike"
-            ),
-            "source": "CareGrid Intelligence",
-        }
-
-    def explain_simulation_result(self, sim_result: Dict[str, Any], before_queue: list) -> Dict[str, Any]:
-        """Build a grounded before/after explanation from an actual simulation result."""
-        evt       = sim_result.get("audit_event", {})
-        moved_up  = sim_result.get("moved_up", [])
-        moved_down = sim_result.get("moved_down", [])
-        event_type = evt.get("event_type", "SIMULATION EVENT")
-        patient_id = evt.get("patient_id", "")
-        reason     = evt.get("reason", "")
-
-        lines = ["WHAT CHANGED?\n"]
-        if patient_id:
-            lines.append(f"Event: {event_type} — Patient {patient_id}")
+        if not target:
+            lines.append("NO MAJOR RANK CHANGES")
+            lines.append("No major rank changes (≥ 2 rank position shifts) are currently recorded in the active audit history.")
         else:
-            lines.append(f"Event: {event_type}")
-        if reason:
-            lines.append(f"Reason: {reason}")
-        lines.append("")
-
-        if moved_up:
-            lines.append(f"PROMOTED IN QUEUE ({len(moved_up)}):")
-            for m in moved_up[:5]:
-                lines.append(f"  {m['patient_id']}: #{m['previous_rank']} → #{m['new_rank']} (↑{m['rank_delta']})")
-        if moved_down:
-            lines.append(f"\nDEMOTED IN QUEUE ({len(moved_down)}):")
-            for m in moved_down[:5]:
-                lines.append(f"  {m['patient_id']}: #{m['previous_rank']} → #{m['new_rank']} ({m['rank_delta']})")
-
-        lines.append("\nINTERPRETATION")
-        if moved_up or moved_down:
+            pid = target["patient_id"]
+            prev_r = target["previous_rank"]
+            new_r = target["new_rank"]
+            delta = target["rank_delta"]
             lines.append(
-                f"The CareGrid deterministic priority engine recalculated rankings for all "
-                f"affected patients. {len(moved_up)} patient(s) moved up; {len(moved_down)} moved down. "
-                f"All changes are based on the updated priority scores computed by the CareGrid engine."
+                f"This is flagged as a Major Rank Change because Patient {pid} shifted from Rank #{prev_r} → #{new_r} "
+                f"({'+' if delta > 0 else ''}{delta} positions), meeting the configured operational threshold of ≥ {target['threshold']} position shifts.\n\n"
+                f"TRIGGER DETAILS\n"
+                f"• Event: {target['event_type']}\n"
+                f"• Details: {target['reason']}\n"
+                f"• Timestamp: {target['timestamp'][:19]}\n\n"
+                f"CareGrid surfaced this indicator deterministically from the Audit Log. No clinical judgment or prediction is implied."
             )
-        else:
-            lines.append("No rank changes resulted from this simulation event. The queue order is unchanged.")
 
-        lines.append("\nSOURCE\nCareGrid Simulation Engine | CareGrid Arbitration Engine")
-
+        lines.append("\nSOURCE\nCareGrid Audit Log | CareGrid Priority Engine")
         return {
             "status": "success",
             "answer": "\n".join(lines),
-            "event_type": event_type,
-            "moved_up": moved_up,
-            "moved_down": moved_down,
-            "before_queue_top5": before_queue[:5] if before_queue else [],
-            "source": "CareGrid Simulation Engine | CareGrid Arbitration Engine",
+            "source": "CareGrid Audit Log | CareGrid Priority Engine"
         }
-
-    # ──────────────────────────────────────────────────────────────────────
-    # V3.5 — AUDIT INTELLIGENCE
-    # ──────────────────────────────────────────────────────────────────────
-
-    def summarize_audit(self, patient_id: str = None, limit: int = 10) -> Dict[str, Any]:
-        """Read and summarize actual audit events. AI cannot modify audit records."""
-        events = self.event_engine.audit_logger.get_events(limit=limit)
-        if patient_id:
-            events = [e for e in events if e.get("patient_id") == patient_id]
-
-        if not events:
-            msg = f"No audit events found{' for patient ' + patient_id if patient_id else ' in the recent log'}."
-            return {"status": "success", "answer": msg, "events": [], "source": "CareGrid Audit Log"}
-
-        lines = [f"RECENT AUDIT EVENTS — {len(events)} record(s)\n"]
-        for evt in events[:8]:
-            ts    = evt.get("timestamp", "")[:19] if evt.get("timestamp") else "—"
-            pid   = evt.get("patient_id", "—")
-            etype = evt.get("event_type", "UNKNOWN")
-            reason= evt.get("reason", "")
-            prev  = evt.get("previous_rank")
-            new   = evt.get("new_rank")
-
-            entry = f"{ts}\n  {etype}"
-            if pid != "—": entry += f" — Patient {pid}"
-            if prev and new: entry += f"\n  Rank: #{prev} → #{new}"
-            if reason: entry += f"\n  {reason}"
-            lines.append(entry)
-
-        # Most significant rank change
-        ranked = [e for e in events if e.get("previous_rank") and e.get("new_rank")]
-        if ranked:
-            big = max(ranked, key=lambda e: abs(e["previous_rank"] - e["new_rank"]))
-            change = abs(big["previous_rank"] - big["new_rank"])
-            lines.append(
-                f"\nMOST SIGNIFICANT RECENT CHANGE\n"
-                f"Patient {big.get('patient_id','—')}: #{big['previous_rank']} → #{big['new_rank']} ({change} positions)\n"
-                f"Event: {big.get('event_type','UNKNOWN')}\n"
-                f"Reason: {big.get('reason','—')}"
-            )
-
-        lines.append("\nSOURCE\nCareGrid Audit Log")
-        return {
-            "status": "success",
-            "answer": "\n\n".join(lines),
-            "events": events,
-            "source": "CareGrid Audit Log",
-        }
-
-    # ──────────────────────────────────────────────────────────────────────
-    # V3.6 — ATTENTION INTELLIGENCE (all deterministic — no AI for detection)
-    # ──────────────────────────────────────────────────────────────────────
-
-    def get_attention_signals(self, near_tie_threshold: float = None,
-                               major_rank_change_threshold: int = 3,
-                               waiting_time_multiplier: float = 1.5,
-                               critical_load_threshold: int = 5) -> Dict[str, Any]:
-        """Detect operational attention signals from live CareGrid state. Pure deterministic logic."""
-        all_patients = self.event_engine.get_ranked_patients()
-        threshold    = near_tie_threshold if near_tie_threshold is not None else self.priority_engine.near_tie_threshold
-        signals      = []
-
-        # 1 — NEAR-TIE DETECTION
-        for i in range(len(all_patients) - 1):
-            a, b = all_patients[i], all_patients[i + 1]
-            diff = round(abs(a.priority_score - b.priority_score), 2)
-            if diff <= threshold:
-                signals.append({
-                    "type": "near_tie",
-                    "severity": "warning",
-                    "patients": [a.patient_id, b.patient_id],
-                    "ranks": [a.rank, b.rank],
-                    "scores": [round(a.priority_score, 1), round(b.priority_score, 1)],
-                    "difference": diff,
-                    "threshold": threshold,
-                    "message": f"Patients {a.patient_id} (#{a.rank}) and {b.patient_id} (#{b.rank}) have a priority score difference of {diff} (threshold: {threshold})",
-                })
-
-        # 2 — MAJOR RANK CHANGE (from audit)
-        recent_events = self.event_engine.audit_logger.get_events(limit=20)
-        seen_pids = set()
-        for evt in recent_events:
-            pid = evt.get("patient_id")
-            if pid and pid not in seen_pids and evt.get("previous_rank") and evt.get("new_rank"):
-                change = abs(evt["previous_rank"] - evt["new_rank"])
-                if change >= major_rank_change_threshold:
-                    seen_pids.add(pid)
-                    signals.append({
-                        "type": "major_rank_change",
-                        "severity": "info",
-                        "patient_id": pid,
-                        "previous_rank": evt["previous_rank"],
-                        "new_rank": evt["new_rank"],
-                        "rank_change": change,
-                        "event_type": evt.get("event_type", "UNKNOWN"),
-                        "message": f"Patient {pid} moved {change} positions (#{evt['previous_rank']} → #{evt['new_rank']})",
-                    })
-
-        # 3 — WAITING-TIME ATTENTION
-        wait_times = [p.waiting_time_minutes for p in all_patients]
-        if wait_times:
-            avg_wait = sum(wait_times) / len(wait_times)
-            wait_threshold = max(120, avg_wait * waiting_time_multiplier)
-            for p in all_patients:
-                if p.waiting_time_minutes >= wait_threshold:
-                    signals.append({
-                        "type": "waiting_time_attention",
-                        "severity": "warning",
-                        "patient_id": p.patient_id,
-                        "rank": p.rank,
-                        "waiting_time_minutes": p.waiting_time_minutes,
-                        "queue_average_minutes": round(avg_wait, 1),
-                        "threshold_minutes": round(wait_threshold, 1),
-                        "message": f"Patient {p.patient_id} waiting {p.waiting_time_minutes} min (queue avg: {avg_wait:.0f} min)",
-                    })
-
-        # 4 — CRITICAL QUEUE LOAD
-        critical_count = len([p for p in all_patients if p.severity >= 70.0])
-        if critical_count >= critical_load_threshold:
-            signals.append({
-                "type": "critical_queue_load",
-                "severity": "critical",
-                "critical_count": critical_count,
-                "total_patients": len(all_patients),
-                "threshold": critical_load_threshold,
-                "message": f"{critical_count} critical patients (severity ≥ 70.0) currently in the active queue",
-            })
-
-        # Sort & cap: near-tie → top-5 by smallest gap; waiting → top-3 by longest wait
-        near_ties = sorted([s for s in signals if s["type"] == "near_tie"],
-                           key=lambda s: s["difference"])[:5]
-        waiting   = sorted([s for s in signals if s["type"] == "waiting_time_attention"],
-                           key=lambda s: -s["waiting_time_minutes"])[:3]
-        others    = [s for s in signals if s["type"] not in ("near_tie", "waiting_time_attention")]
-        capped_signals = near_ties + others + waiting
-        total_near_ties = len([s for s in signals if s["type"] == "near_tie"])
-
-        return {
-            "status": "success",
-            "signals": capped_signals,
-            "signal_count": len(capped_signals),
-            "total_near_ties_found": total_near_ties,
-            "near_tie_threshold": threshold,
-            "source": "CareGrid Current State",
-        }
-
-
 
     def explain_attention_signal(self, signal: Dict[str, Any]) -> Dict[str, Any]:
-        """Return a grounded AI explanation for a specific attention signal."""
-        stype = signal.get("type", "")
+        """
+        Grounded AI explanation of any V4.0 deterministic Attention Signal.
+        """
+        sig_type = signal.get("signal_type", "ATTENTION_SIGNAL")
+        lines = [f"ATTENTION SIGNAL EXPLANATION: {sig_type.replace('_', ' ')}\n"]
+        lines.append("WHY IS THIS FLAGGED?")
 
-        if stype == "near_tie":
-            patients = signal.get("patients", [])
-            scores   = signal.get("scores", [])
-            diff     = signal.get("difference", 0)
-            threshold= signal.get("threshold", self.priority_engine.near_tie_threshold)
-            answer = (
-                f"NEAR-TIE SIGNAL EXPLANATION\n\n"
-                f"Patients {patients[0] if len(patients)>0 else '—'} and {patients[1] if len(patients)>1 else '—'} "
-                f"have priority scores separated by only {diff} points under the current CareGrid weighting.\n\n"
-                f"  {patients[0] if len(patients)>0 else '—'}: {scores[0] if len(scores)>0 else '—'}\n"
-                f"  {patients[1] if len(patients)>1 else '—'}: {scores[1] if len(scores)>1 else '—'}\n"
-                f"  Difference: {diff}\n\n"
-                f"The configured near-tie threshold is {threshold}. Any priority difference at or below this "
-                f"threshold is flagged as a near-tie signal. This is a data-driven operational signal — "
-                f"CareGrid makes no clinical judgment about these patients.\n\n"
-                f"SOURCE\nCareGrid Current State | CareGrid Priority Engine"
+        if sig_type == "NEAR_TIE":
+            pid_a = signal.get("patient_id_a", "N/A")
+            pid_b = signal.get("patient_id_b", "N/A")
+            diff = signal.get("score_diff", 0.0)
+            lines.append(
+                f"These patients have closely matched priority scores (Gap: {diff} pts) under the current CareGrid configuration.\n\n"
+                f"• Patient {pid_a}: Rank #{signal.get('rank_a')}, Priority Score {signal.get('score_a')}\n"
+                f"• Patient {pid_b}: Rank #{signal.get('rank_b')}, Priority Score {signal.get('score_b')}\n\n"
+                f"OPERATIONAL RULE\n"
+                f"Score separation is within the configured near-tie threshold of ≤ 1.0 points. "
+                f"CareGrid highlights closely matched candidates so clinicians can review physiological score breakdown side-by-side."
             )
-
-        elif stype == "major_rank_change":
-            pid  = signal.get("patient_id", "Unknown")
-            prev = signal.get("previous_rank")
-            new  = signal.get("new_rank")
-            chg  = signal.get("rank_change", 0)
-            etype= signal.get("event_type", "UNKNOWN")
-            answer = (
-                f"MAJOR RANK CHANGE SIGNAL EXPLANATION\n\n"
-                f"Patient {pid} moved {chg} position(s) in the CareGrid priority queue "
-                f"(#{prev} → #{new}).\n\n"
-                f"Triggering event: {etype}\n\n"
-                f"This movement reflects a significant recalculation by the CareGrid deterministic priority engine, "
-                f"caused by a data event that substantially altered one or more priority score contributions.\n\n"
-                f"SOURCE\nCareGrid Audit Log | CareGrid Priority Engine"
+        elif sig_type == "MAJOR_RANK_CHANGE":
+            pid = signal.get("patient_id", "N/A")
+            prev_r = signal.get("previous_rank", "?")
+            new_r = signal.get("new_rank", "?")
+            delta = signal.get("rank_delta", 0)
+            lines.append(
+                f"Patient {pid} experienced a major rank position shift from Rank #{prev_r} → #{new_r} ({'+' if delta > 0 else ''}{delta} positions).\n\n"
+                f"OPERATIONAL RULE\n"
+                f"Rank position delta meets or exceeds the operational attention threshold of ≥ 2 position shifts."
             )
-
-        elif stype == "waiting_time_attention":
-            pid  = signal.get("patient_id", "Unknown")
-            wt   = signal.get("waiting_time_minutes", 0)
-            avg  = signal.get("queue_average_minutes", 0)
-            thr  = signal.get("threshold_minutes", 0)
-            answer = (
-                f"WAITING-TIME ATTENTION SIGNAL EXPLANATION\n\n"
-                f"Patient {pid} has a recorded waiting duration of {wt} minutes. "
-                f"The current queue average is {avg:.0f} minutes; the attention threshold is {thr:.0f} minutes.\n\n"
-                f"This is an operational attention signal generated from the CareGrid waiting-time equity component. "
-                f"It does not represent a medical emergency determination.\n\n"
-                f"SOURCE\nCareGrid Current State"
+        elif sig_type == "WAITING_TIME_ATTENTION":
+            pid = signal.get("patient_id", "N/A")
+            wait_m = signal.get("waiting_time_minutes", 0)
+            thresh = signal.get("threshold", 120)
+            lines.append(
+                f"Patient {pid} waiting duration ({wait_m} min) exceeds the configured operational attention threshold of ≥ {thresh} minutes.\n\n"
+                f"OPERATIONAL RULE\n"
+                f"Extended wait time is surfaced deterministically to ensure queue equity and prevent prolonged pending status."
             )
-
-        elif stype == "critical_queue_load":
-            count = signal.get("critical_count", 0)
-            total = signal.get("total_patients", 0)
-            threshold = signal.get("threshold", 5)
-            answer = (
-                f"CRITICAL QUEUE LOAD SIGNAL EXPLANATION\n\n"
-                f"{count} out of {total} patients currently in the CareGrid queue have a severity score ≥ 70.0 "
-                f"(SOFA-derived). The signal threshold is {threshold} critical patients.\n\n"
-                f"This indicates elevated operational load on the CareGrid priority queue. "
-                f"It does not represent a clinical decision or medical recommendation.\n\n"
-                f"SOURCE\nCareGrid Current State"
+        elif sig_type == "CRITICAL_QUEUE_LOAD":
+            cnt = signal.get("count", 0)
+            thresh = signal.get("threshold", 5)
+            lines.append(
+                f"This is flagged as Critical Queue Load because {cnt} critical severity patients (SOFA severity ≥ 70.0) are currently present out of 3600 total records, meeting the operational threshold of ≥ {thresh} critical candidates.\n\n"
+                f"OPERATIONAL RULE\n"
+                f"High critical load requires ICU capacity review to manage impending bed allocation demand."
             )
-
         else:
-            answer = f"CareGrid flagged this signal based on current queue state data.\n\nSOURCE\nCareGrid Current State"
+            lines.append(signal.get("description", "Deterministic operational signal surfaced by CareGrid Attention Engine."))
 
+        lines.append("\nSOURCE\nCareGrid Current State | CareGrid Attention Engine")
         return {
             "status": "success",
-            "signal_type": stype,
-            "answer": answer,
-            "source": "CareGrid Current State | CareGrid Priority Engine",
+            "answer": "\n".join(lines),
+            "source": "CareGrid Current State | CareGrid Attention Engine"
         }
-
 
