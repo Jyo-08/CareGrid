@@ -13,6 +13,7 @@ from src.priority_engine import PriorityEngine
 from src.audit_logger import AuditLogger
 from src.event_engine import EventEngine
 from src.simulation_engine import SimulationEngine
+from src.intelligence_engine import IntelligenceEngine
 
 PORT = 8080
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -23,6 +24,7 @@ priority_engine = PriorityEngine(weight_severity=0.50, weight_survival=0.30, wei
 audit_logger = AuditLogger()
 event_engine = EventEngine(priority_engine=priority_engine, audit_logger=audit_logger)
 sim_engine = SimulationEngine(data_loader=loader, event_engine=event_engine)
+intelligence_engine = IntelligenceEngine(event_engine=event_engine, priority_engine=priority_engine)
 
 # Seed initial state
 sim_engine.seed_initial_state()
@@ -162,6 +164,10 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
             }
             self.send_json_response(sanity_report)
 
+        elif path == "/api/intelligence/state":
+            snapshot = intelligence_engine.get_current_snapshot()
+            self.send_json_response({"status": "success", "snapshot": snapshot})
+
         # Static UI Assets
         elif path == "/" or path == "/index.html":
             self.send_file_response(os.path.join(BASE_DIR, "static/index.html"), "text/html")
@@ -183,7 +189,18 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             data = {}
 
-        if path == "/api/priority-weights":
+        if path == "/api/intelligence/ask":
+            q = data.get("question", "")
+            try:
+                res = intelligence_engine.ask(question=q)
+                self.send_json_response(res)
+            except Exception as e:
+                self.send_json_response({
+                    "status": "error",
+                    "message": f"CareGrid Intelligence Unavailable: {str(e)}"
+                }, 500)
+
+        elif path == "/api/priority-weights":
             try:
                 w_sev = float(data.get("weight_severity", 0.50))
                 w_surv = float(data.get("weight_survival", 0.30))

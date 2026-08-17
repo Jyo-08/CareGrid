@@ -31,6 +31,9 @@
                     <button class="nav-item" data-tab="simulation">
                         Simulation Mode
                     </button>
+                    <button class="nav-item" data-tab="intelligence">
+                        CareGrid Intelligence
+                    </button>
                 </nav>
             </div>
 
@@ -215,6 +218,64 @@
                                 <div style="font-size: 12px; color: var(--text-secondary);">Loading decision log...</div>
                             </div>
                         </section>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: CAREGRID INTELLIGENCE (V3.0 FOUNDATION) -->
+            <div class="tab-pane" id="pane-intelligence">
+                <div class="ui-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h2>CareGrid Intelligence</h2>
+                            <p class="card-subtitle">Ask about the current ICU priority state.</p>
+                        </div>
+                    </div>
+
+                    <!-- SUGGESTED QUESTIONS -->
+                    <div style="margin-bottom: 20px;">
+                        <span class="sidebar-title" style="padding-left: 0;">SUGGESTED QUESTIONS</span>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
+                            <button class="filter-pill intel-btn" id="btn-q1" data-q="Why is the top-ranked patient #1?">Why is the top-ranked patient #1?</button>
+                            <button class="filter-pill intel-btn" id="btn-q2" data-q="Summarize the current queue.">Summarize the current queue.</button>
+                            <button class="filter-pill intel-btn" id="btn-q3" data-q="What is the current priority state?">What is the current priority state?</button>
+                        </div>
+                    </div>
+
+                    <!-- ASK CAREGRID INPUT -->
+                    <div style="margin-bottom: 24px;">
+                        <span class="sidebar-title" style="padding-left: 0;">ASK CAREGRID</span>
+                        <div style="display: flex; gap: 10px; margin-top: 8px;">
+                            <input type="text" id="intel-query-input" class="search-input" style="flex: 1; min-width: 0; background: #ffffff; border: 1px solid #cbd5e1;" placeholder="Type your question here...">
+                            <button id="btn-intel-ask" class="btn-ops" style="padding: 10px 24px; font-size: 12px; background: #0f172a;">ASK</button>
+                        </div>
+                    </div>
+
+                    <!-- RESPONSE CONTAINER -->
+                    <div style="display: grid; grid-template-columns: 1fr 300px; gap: 20px;">
+                        <div id="intel-response-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">RESPONSE</span>
+                                <span class="status-badge admitted" style="font-size: 10px;" id="intel-source-tag">SOURCE: CareGrid Current Priority State</span>
+                            </div>
+                            <div id="intel-answer-text" style="font-size: 14px; color: #0f172a; font-weight: 500; line-height: 1.5; margin-bottom: 16px;">
+                                Select a suggested question or type a query above to query the current CareGrid state.
+                            </div>
+                            <div id="intel-evidence-box" style="display: none; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
+                                <span style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 8px; display: block;">EVIDENCE & STRUCTURED CONTEXT</span>
+                                <ul id="intel-evidence-list" style="font-size: 12px; color: #334155; padding-left: 18px; line-height: 1.6;">
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- CAREGRID CONTEXT SNAPSHOT CARD -->
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
+                            <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">CAREGRID CONTEXT</span>
+                            <div class="cap-item"><span style="color: var(--text-secondary);">Patients in Queue</span><span class="cap-val" id="icontext-queue">--</span></div>
+                            <div class="cap-item"><span style="color: var(--text-secondary);">Critical Patients</span><span class="cap-val" style="color: var(--status-critical);" id="icontext-critical">--</span></div>
+                            <div class="cap-item"><span style="color: var(--text-secondary);">Top-Ranked Patient</span><span class="cap-val" id="icontext-toppatient">--</span></div>
+                            <div class="cap-item"><span style="color: var(--text-secondary);">Current Top Priority</span><span class="cap-val" style="color: var(--status-success);" id="icontext-topscore">--</span></div>
+                        </div>
                     </div>
                 </div>
             </div>

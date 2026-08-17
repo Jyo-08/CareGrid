@@ -20,6 +20,7 @@ from src.priority_engine import PriorityEngine
 from src.audit_logger import AuditLogger
 from src.event_engine import EventEngine
 from src.simulation_engine import SimulationEngine
+from src.intelligence_engine import IntelligenceEngine
 from src.server import get_ranked_patients
 
 
@@ -31,6 +32,7 @@ class TestCareGrid(unittest.TestCase):
         self.audit = AuditLogger()
         self.events = EventEngine(priority_engine=self.engine, audit_logger=self.audit)
         self.sim = SimulationEngine(data_loader=self.loader, event_engine=self.events)
+        self.intel = IntelligenceEngine(event_engine=self.events, priority_engine=self.engine)
 
     # 1. Dataset test: required CSVs exist and load
     def test_01_required_csvs_exist_and_load(self):
@@ -245,6 +247,20 @@ class TestCareGrid(unittest.TestCase):
         self.assertIn("explanation_text", exp)
         self.assertIn("comparison_explanation", exp)
         self.assertIn("P-501", exp["explanation_text"])
+
+    # 21. Intelligence Engine V3.0 foundation test
+    def test_21_intelligence_engine_foundation(self):
+        self.sim.seed_initial_state()
+        res_why = self.intel.ask("Why is the top-ranked patient #1?")
+        self.assertEqual(res_why["status"], "success")
+        self.assertIn("CareGrid Current Priority State", res_why["source"])
+        self.assertIn("evidence", res_why)
+
+        res_sum = self.intel.ask("Summarize the current queue.")
+        self.assertEqual(res_sum["status"], "success")
+
+        res_state = self.intel.ask("What is the current priority state?")
+        self.assertEqual(res_state["status"], "success")
 
 
 if __name__ == "__main__":

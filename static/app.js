@@ -1,4 +1,4 @@
-/* CareGrid V2 — Operational Dashboard Client Logic */
+/* CareGrid V2 & V3.0 — Operational Dashboard & Intelligence Client Logic */
 
 document.addEventListener("DOMContentLoaded", () => {
     initApp();
@@ -12,6 +12,7 @@ async function initApp() {
     setupTabNavigation();
     setupEventListeners();
     setupModalListeners();
+    setupIntelligenceListeners();
     await fetchOverview();
     await fetchPatientsQueue();
     await fetchSideAuditEvents();
@@ -35,12 +36,15 @@ function setupTabNavigation() {
             if (titleElem) {
                 titleElem.textContent = tabName === "command-center" ? "Command Center" :
                                         tabName === "simulation" ? "Simulation Mode" :
+                                        tabName === "intelligence" ? "CareGrid Intelligence" :
                                         tabName === "audit" ? "Audit Log" :
                                         tabName === "methodology" ? "Prioritization Methodology" : "Research & Literature";
             }
 
             if (tabName === "audit") {
                 await fetchAuditTimeline();
+            } else if (tabName === "intelligence") {
+                await fetchIntelligenceSnapshot();
             }
         });
     });
@@ -66,7 +70,6 @@ function setupModalListeners() {
 }
 
 function setupEventListeners() {
-    // Filter pills
     const fAll = document.getElementById("filter-all");
     const fCrit = document.getElementById("filter-critical");
     const fWait = document.getElementById("filter-waiting");
@@ -75,7 +78,6 @@ function setupEventListeners() {
     if (fCrit) fCrit.addEventListener("click", () => applyFilter("Critical"));
     if (fWait) fWait.addEventListener("click", () => applyFilter("Waiting"));
 
-    // Patient search input
     const searchInput = document.getElementById("patient-search-input");
     if (searchInput) {
         searchInput.addEventListener("input", (e) => {
@@ -85,14 +87,12 @@ function setupEventListeners() {
         });
     }
 
-    // Simulation controls
     setupSimAction("sim-act-critical", "new_critical_patient");
     setupSimAction("sim-act-spike", "severity_spike");
     setupSimAction("sim-act-advance", "advance_time");
     setupSimAction("sim-act-discharge", "discharge_top");
     setupSimAction("sim-act-reset", "reset");
 
-    // Slider sync
     ["sev", "surv", "wait"].forEach(key => {
         const input = document.getElementById(`weight-${key}`);
         const display = document.getElementById(`val-${key}`);
@@ -130,6 +130,113 @@ function setupEventListeners() {
                 console.error("Error updating weights:", err);
             }
         });
+    }
+}
+
+function setupIntelligenceListeners() {
+    const btnAsk = document.getElementById("btn-intel-ask");
+    const inputQ = document.getElementById("intel-query-input");
+
+    if (btnAsk && inputQ) {
+        btnAsk.addEventListener("click", async () => {
+            const q = inputQ.value.trim();
+            if (q) await askIntelligence(q);
+        });
+
+        inputQ.addEventListener("keydown", async (e) => {
+            if (e.key === "Enter") {
+                const q = inputQ.value.trim();
+                if (q) await askIntelligence(q);
+            }
+        });
+    }
+
+    // Suggested Questions buttons
+    document.querySelectorAll(".intel-btn").forEach(btn => {
+        btn.addEventListener("click", async () => {
+            const q = btn.dataset.q;
+            if (inputQ) inputQ.value = q;
+            await askIntelligence(q);
+        });
+    });
+}
+
+async function askIntelligence(question) {
+    const ansText = document.getElementById("intel-answer-text");
+    const sourceTag = document.getElementById("intel-source-tag");
+    const evidenceBox = document.getElementById("intel-evidence-box");
+    const evidenceList = document.getElementById("intel-evidence-list");
+
+    if (ansText) ansText.textContent = "Querying CareGrid Intelligence foundation...";
+
+    try {
+        const res = await fetch("/api/intelligence/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+
+        if (data.status === "success") {
+            if (ansText) ansText.textContent = data.answer;
+            if (sourceTag) sourceTag.textContent = `SOURCE: ${data.source}`;
+
+            if (data.context_summary) {
+                const cs = data.context_summary;
+                const iq = document.getElementById("icontext-queue");
+                const ic = document.getElementById("icontext-critical");
+                const it = document.getElementById("icontext-toppatient");
+                const is = document.getElementById("icontext-topscore");
+
+                if (iq) iq.textContent = cs.queue_size;
+                if (ic) ic.textContent = cs.critical_count;
+                if (it) it.textContent = cs.top_patient_id;
+                if (is) is.textContent = cs.top_priority_score.toFixed(1);
+            }
+
+            if (data.evidence && Object.keys(data.evidence).length > 0) {
+                const ev = data.evidence;
+                evidenceList.innerHTML = `
+                    <li><strong>Top Patient ID:</strong> ${ev.patient_id} (Rank #${ev.rank})</li>
+                    <li><strong>Priority Score:</strong> ${ev.priority_score.toFixed(1)} / 100.0</li>
+                    <li><strong>SOFA Organ Failure Severity:</strong> ${ev.severity.toFixed(1)} (SOFA raw: ${ev.sofa_score}) → +${ev.severity_contribution.toFixed(1)} pts</li>
+                    <li><strong>Survival Likelihood:</strong> ${ev.survival_likelihood.toFixed(1)}% → +${ev.survival_contribution.toFixed(1)} pts</li>
+                    <li><strong>Waiting Duration Pending:</strong> ${ev.waiting_time_minutes} minutes → +${ev.waiting_contribution.toFixed(1)} pts</li>
+                `;
+                if (evidenceBox) evidenceBox.style.display = "block";
+            } else {
+                if (evidenceBox) evidenceBox.style.display = "none";
+            }
+        } else {
+            if (ansText) ansText.textContent = "CAREGRID INTELLIGENCE UNAVAILABLE";
+            if (sourceTag) sourceTag.textContent = "SOURCE: Unavailable";
+        }
+    } catch (err) {
+        console.error("Intelligence query failed:", err);
+        if (ansText) ansText.textContent = "CAREGRID INTELLIGENCE UNAVAILABLE";
+        if (sourceTag) sourceTag.textContent = "SOURCE: Unavailable";
+    }
+}
+
+async function fetchIntelligenceSnapshot() {
+    try {
+        const res = await fetch("/api/intelligence/state");
+        const data = await res.json();
+        if (data.status === "success") {
+            const sn = data.snapshot;
+            const top_p = sn.top_patient;
+            const iq = document.getElementById("icontext-queue");
+            const ic = document.getElementById("icontext-critical");
+            const it = document.getElementById("icontext-toppatient");
+            const is = document.getElementById("icontext-topscore");
+
+            if (iq) iq.textContent = sn.total_patients_in_queue;
+            if (ic) ic.textContent = sn.critical_patients_count;
+            if (it) it.textContent = top_p ? top_p.patient_id : "N/A";
+            if (is) is.textContent = top_p ? top_p.priority_score.toFixed(1) : "--";
+        }
+    } catch (err) {
+        console.error("Fetch intelligence snapshot failed:", err);
     }
 }
 
@@ -255,7 +362,6 @@ window.selectPatientRow = async function(patientId, openModal = false) {
     }
     if (!patient) return;
 
-    // Render Bottom-Left Selected Patient Card
     document.getElementById("panel-patient-id").textContent = `PATIENT ${patient.patient_id}`;
     document.getElementById("panel-rank-badge").textContent = `RANK #${patient.rank}`;
     document.getElementById("panel-score").textContent = patient.priority_score.toFixed(1);
@@ -269,7 +375,7 @@ window.selectPatientRow = async function(patientId, openModal = false) {
 
     const delta = patient.rank_delta || 0;
     const movementText = delta > 0 ? `↑ ${delta} positions` :
-                         delta < 0 ? `↓ ${Math.abs(delta)} positions` : `-- Stable Rank Position`;
+                         delta < 0 ? `↓ ${Math.abs(delta)} positions` : `-- Stable`;
     document.getElementById("panel-rank-movement").textContent = movementText;
 
     document.getElementById("panel-sev-val").textContent = patient.severity;
