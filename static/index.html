@@ -3,82 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CareGrid V2 — ICU Operations & Critical Care Intelligence</title>
+    <title>CareGrid V2 — ICU Bed Arbitration & Priority Engine</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="app-wrapper">
-        <!-- Minimal Operational Navigation Bar -->
-        <nav class="top-nav">
-            <div class="nav-brand">
-                <span class="brand-symbol">❖</span>
-                <span class="brand-title">CAREGRID</span>
-                <span class="brand-badge">V2 ENGINE</span>
-            </div>
-            <div class="nav-tabs">
-                <button class="nav-tab active" data-tab="command-center">COMMAND CENTER</button>
-                <button class="nav-tab" data-tab="simulation">SIMULATION</button>
-                <button class="nav-tab" data-tab="audit">AUDIT LOG</button>
-                <button class="nav-tab" data-tab="methodology">METHODOLOGY</button>
-                <button class="nav-tab" data-tab="research">RESEARCH</button>
-            </div>
-            <div class="nav-status">
-                <span class="status-indicator"><span class="dot pulse"></span> ENGINE ONLINE</span>
-            </div>
-        </nav>
-
-        <!-- Main Contextual Header -->
-        <header class="ops-header">
-            <div class="header-main">
-                <span class="header-eyebrow">ICU OPERATIONS / PRIORITY QUEUE</span>
-                <h1 class="header-title">Critical-care priority, <span class="accent-green">made transparent.</span></h1>
-                <p class="header-subtitle">A deterministic prioritization engine combining SOFA-derived organ failure severity, survival likelihood, and waiting-time equity inputs.</p>
-            </div>
-            <div class="header-scoring-summary">
-                <span class="scoring-label">SCORING MODEL</span>
-                <div class="scoring-weights-display" id="header-weights-summary">
-                    50% Severity · 30% Survival · 20% Wait
+    <div class="app-container">
+        <!-- Persistent Left Sidebar (Matching Reference) -->
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-icon-box">❖</div>
+                <div class="brand-name">
+                    CareGrid
+                    <span>ICU Arbitration V2</span>
                 </div>
             </div>
-        </header>
 
-        <!-- System Metrics Strip -->
-        <section class="metrics-strip">
-            <div class="strip-card">
-                <div class="strip-label">PATIENT RECORDS</div>
-                <div class="strip-value" id="strip-total-patients">3,600</div>
-                <div class="strip-sub">Processed Patient Population</div>
+            <!-- Navigation Sections -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">General</div>
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-tab="command-center">
+                        Command Center
+                    </button>
+                    <button class="nav-item" data-tab="simulation">
+                        Simulation Mode
+                    </button>
+                </nav>
             </div>
-            <div class="strip-card">
-                <div class="strip-label">ENGINE STATUS</div>
-                <div class="strip-value text-emerald">ONLINE</div>
-                <div class="strip-sub">Deterministic Scoring & Arbitration</div>
-            </div>
-            <div class="strip-card">
-                <div class="strip-label">CAPACITY / OCCUPANCY</div>
-                <div class="strip-value" id="strip-bed-capacity">42 / 50</div>
-                <div class="strip-sub"><span id="strip-available-beds" class="text-green">8 Beds Available</span> <span class="badge simulated mini">SIMULATED CAPACITY</span></div>
-            </div>
-        </section>
 
-        <!-- Main Tab Workspace -->
-        <main class="main-workspace">
-            <!-- TAB 1: COMMAND CENTER -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">Tools & Specs</div>
+                <nav class="sidebar-nav">
+                    <button class="nav-item" data-tab="audit">
+                        Audit Log
+                    </button>
+                    <button class="nav-item" data-tab="methodology">
+                        Methodology
+                    </button>
+                    <button class="nav-item" data-tab="research">
+                        Research
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Bottom Safeguard Card -->
+            <div class="sidebar-promo-card">
+                <div class="promo-title">Decision Support Engine</div>
+                <p class="promo-sub">SOFA organ failure severity, survival potential, waiting equity.</p>
+                <div class="promo-btn">V2 ENGINE ACTIVE</div>
+            </div>
+        </aside>
+
+        <!-- Main Dashboard Workspace -->
+        <main class="app-main-content">
+            <!-- Top Bar Header -->
+            <header class="app-topbar">
+                <div class="topbar-header">
+                    <h1 class="topbar-title" id="page-current-title">Command Center</h1>
+                    <p class="topbar-sub">ICU prioritization & capacity arbitration</p>
+                </div>
+
+                <div class="topbar-actions">
+                    <div class="search-input-wrapper">
+                        <input type="text" id="patient-search-input" class="search-input" placeholder="Search patient ID (e.g. P-139169)...">
+                    </div>
+                </div>
+            </header>
+
+            <!-- TAB 1: COMMAND CENTER (Left Column Queue Table, Right Column Intelligence & Status) -->
             <div class="tab-pane active" id="pane-command-center">
-                <div class="ops-split-layout">
-                    <!-- Left: Live Priority Queue Table -->
-                    <div class="queue-panel">
-                        <div class="panel-header">
-                            <div class="panel-title">
-                                <span class="panel-eyebrow">LIVE PRIORITY QUEUE</span>
-                                <h2>Patients awaiting critical-care capacity</h2>
-                                <span class="panel-count" id="queue-status-text">TOP 50 OF 3,600 RECORDS</span>
+                <div class="dashboard-grid-2col">
+                    <!-- LEFT COLUMN: LIVE PRIORITY QUEUE TABLE (FULL HEIGHT, NOTHING BELOW IT) -->
+                    <section class="ui-card" style="grid-column: 1 / 2;">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h2>Live Priority Queue</h2>
+                                <p class="card-subtitle" id="queue-status-text">Top 50 Patient Records · Real-time Dynamic Reranking</p>
                             </div>
-                            <div class="panel-controls">
-                                <button id="btn-refresh-queue" class="btn-ops">REFRESH</button>
+                            <div class="card-filter-pills">
+                                <button class="filter-pill active" id="filter-all">All</button>
+                                <button class="filter-pill" id="filter-critical">Critical</button>
+                                <button class="filter-pill" id="filter-waiting">Waiting</button>
                             </div>
                         </div>
 
@@ -86,249 +94,237 @@
                             <table class="ops-table">
                                 <thead>
                                     <tr>
-                                        <th class="col-rank">RANK</th>
-                                        <th class="col-patient">PATIENT ID</th>
-                                        <th class="col-score">PRIORITY</th>
-                                        <th class="col-sev">SEVERITY</th>
-                                        <th class="col-surv">SURVIVAL</th>
-                                        <th class="col-wait">WAIT TIME</th>
-                                        <th class="col-status">STATUS</th>
-                                        <th class="col-action">ACTION</th>
+                                        <th>RANK</th>
+                                        <th>PATIENT ID</th>
+                                        <th>PRIORITY</th>
+                                        <th>SEVERITY</th>
+                                        <th>SURVIVAL</th>
+                                        <th>WAIT TIME</th>
+                                        <th>STATUS</th>
+                                        <th>ACTION</th>
                                     </tr>
                                 </thead>
                                 <tbody id="ops-queue-body">
                                     <tr>
-                                        <td colspan="8" class="loading-state">Loading CareGrid patient dataset...</td>
+                                        <td colspan="8" style="text-align: center; padding: 24px; color: var(--text-muted);">Loading CareGrid priority engine...</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
-                    </div>
+                    </section>
 
-                    <!-- Right: Patient Detail & Decision Intelligence Panel -->
-                    <div class="detail-panel" id="detail-panel-container">
-                        <div class="panel-header">
-                            <div class="panel-title">
-                                <span class="panel-eyebrow">DECISION INTELLIGENCE</span>
-                                <h3 id="panel-patient-id">PATIENT P-139169</h3>
-                            </div>
-                            <span class="rank-indicator" id="panel-rank-badge">RANK #1</span>
-                        </div>
-
-                        <!-- Score Hero Box -->
-                        <div class="score-hero-box">
-                            <div class="score-hero-main">
-                                <span class="score-hero-label">TOTAL PRIORITY SCORE</span>
-                                <div class="score-hero-num" id="panel-score">87.9</div>
-                            </div>
-                            <div class="score-hero-meta">
-                                <div class="meta-item">
-                                    <span class="meta-label">STATUS</span>
-                                    <span class="meta-val" id="panel-status">Admitted</span>
+                    <!-- RIGHT COLUMN: PATIENT INTELLIGENCE + ICU OCCUPANCY + RECENT DECISION AUDIT -->
+                    <div style="grid-column: 2 / 3; display: flex; flex-direction: column; gap: 20px;">
+                        <!-- 1. RIGHT TOP CARD: SELECTED PATIENT INTELLIGENCE -->
+                        <section class="ui-card">
+                            <div class="card-header">
+                                <div class="card-title-group">
+                                    <h3>Patient Intelligence</h3>
+                                    <p class="card-subtitle" id="panel-patient-id">PATIENT P-139169</p>
                                 </div>
-                                <div class="meta-item">
-                                    <span class="meta-label">RANK MOVEMENT</span>
-                                    <span class="meta-val text-green" id="panel-rank-movement">-- Stable</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Metrics Bars Group -->
-                        <div class="metrics-bars-group">
-                            <div class="metric-bar-item">
-                                <div class="bar-header">
-                                    <span class="bar-title">SOFA-DERIVED SEVERITY</span>
-                                    <span class="bar-val" id="panel-sev-val">100.0</span>
-                                </div>
-                                <div class="bar-track"><div class="bar-fill fill-sev" id="bar-fill-sev" style="width: 100%;"></div></div>
-                                <div class="bar-sub" id="panel-sofa-raw">SOFA Raw: 21 · clamp(SOFA/20*100, 0, 100)</div>
+                                <span class="status-badge admitted" id="panel-status-badge">● ADMITTED</span>
                             </div>
 
-                            <div class="metric-bar-item">
-                                <div class="bar-header">
-                                    <span class="bar-title">SURVIVAL LIKELIHOOD</span>
-                                    <span class="bar-val" id="panel-surv-val">68.5%</span>
+                            <div class="selected-patient-hero">
+                                <div>
+                                    <span class="rank-badge rank-1" id="panel-rank-badge">RANK #1</span>
+                                    <div style="font-size: 11px; font-weight:600; color: var(--text-secondary); margin-top: 4px;" id="panel-rank-movement">-- Stable</div>
                                 </div>
-                                <div class="bar-track"><div class="bar-fill fill-surv" id="bar-fill-surv" style="width: 68.5%;"></div></div>
-                                <div class="bar-sub">Estimated post-ICU survival potential</div>
-                            </div>
-
-                            <div class="metric-bar-item">
-                                <div class="bar-header">
-                                    <span class="bar-title">WAITING DURATION</span>
-                                    <span class="bar-val" id="panel-wait-val">104 min</span>
-                                </div>
-                                <div class="bar-track"><div class="bar-fill fill-wait" id="bar-fill-wait" style="width: 86.6%;"></div></div>
-                                <div class="bar-sub">Normalized duration pending allocation</div>
-                            </div>
-                        </div>
-
-                        <!-- Transparent Score Breakdown -->
-                        <div class="breakdown-section">
-                            <span class="section-eyebrow">TRANSPARENT SCORE BREAKDOWN</span>
-                            <div class="breakdown-list">
-                                <div class="breakdown-row">
-                                    <span class="breakdown-name">Severity contribution</span>
-                                    <div class="breakdown-bar-track"><div class="breakdown-bar-fill fill-sev" id="bfill-sev" style="width: 50%;"></div></div>
-                                    <span class="breakdown-pts" id="panel-pts-sev">+50.0 pts</span>
-                                </div>
-                                <div class="breakdown-row">
-                                    <span class="breakdown-name">Survival contribution</span>
-                                    <div class="breakdown-bar-track"><div class="breakdown-bar-fill fill-surv" id="bfill-surv" style="width: 20.5%;"></div></div>
-                                    <span class="breakdown-pts" id="panel-pts-surv">+20.5 pts</span>
-                                </div>
-                                <div class="breakdown-row">
-                                    <span class="breakdown-name">Waiting-time contribution</span>
-                                    <div class="breakdown-bar-track"><div class="breakdown-bar-fill fill-wait" id="bfill-wait" style="width: 17.3%;"></div></div>
-                                    <span class="breakdown-pts" id="panel-pts-wait">+17.3 pts</span>
+                                <div class="hero-score-box">
+                                    <div class="hero-score-val" id="panel-score">87.9</div>
+                                    <div class="hero-score-lbl">PRIORITY SCORE</div>
                                 </div>
                             </div>
-                        </div>
 
-                        <!-- Why This Rank? Explanation Box -->
-                        <div class="explain-card">
-                            <span class="explain-eyebrow">WHY THIS RANK?</span>
-                            <p class="explain-text" id="panel-explain-text">High SOFA-derived severity is the primary contributor to this patient's current priority score.</p>
-                            <span class="explain-rule" id="panel-tiebreak-rule">Standard Score Priority</span>
-                        </div>
+                            <div class="metrics-bars-group">
+                                <div class="metric-bar-item">
+                                    <div class="bar-header">
+                                        <span class="bar-title">Severity</span>
+                                        <span class="bar-val" id="panel-sev-val">100.0</span>
+                                    </div>
+                                    <div class="bar-track"><div class="bar-fill" id="bar-fill-sev" style="width: 100%;"></div></div>
+                                </div>
 
-                        <!-- Data Provenance Section -->
-                        <div class="provenance-strip">
-                            <span class="section-eyebrow">DATA PROVENANCE CLASSIFICATION</span>
-                            <div class="provenance-grid">
-                                <div class="p-item"><span class="p-label">Patient ID</span> <span class="badge source">MAPPED VALUE</span></div>
-                                <div class="p-item"><span class="p-label">Severity</span> <span class="badge derived">DERIVED FROM SOFA</span></div>
-                                <div class="p-item"><span class="p-label">Survival</span> <span class="badge simulated">SIMULATED VALUE</span></div>
-                                <div class="p-item"><span class="p-label">Wait Time</span> <span class="badge simulated">SIMULATED VALUE</span></div>
+                                <div class="metric-bar-item">
+                                    <div class="bar-header">
+                                        <span class="bar-title">Survival</span>
+                                        <span class="bar-val" id="panel-surv-val">68.5%</span>
+                                    </div>
+                                    <div class="bar-track"><div class="bar-fill" id="bar-fill-surv" style="width: 68.5%;"></div></div>
+                                </div>
+
+                                <div class="metric-bar-item">
+                                    <div class="bar-header">
+                                        <span class="bar-title">Wait Duration</span>
+                                        <span class="bar-val" id="panel-wait-val">104 min</span>
+                                    </div>
+                                    <div class="bar-track"><div class="bar-fill" id="bar-fill-wait" style="width: 86.6%;"></div></div>
+                                </div>
                             </div>
-                        </div>
+
+                            <div class="explain-card" id="panel-explain-card">
+                                <span class="explain-eyebrow">RANK EXPLANATION</span>
+                                <p class="explain-text" id="panel-explain-text">High SOFA-derived severity is the primary contributor.</p>
+                            </div>
+                        </section>
+
+                        <!-- 2. RIGHT MIDDLE CARD: ICU BED OCCUPANCY / CAPACITY -->
+                        <section class="ui-card">
+                            <div class="card-header">
+                                <div class="card-title-group">
+                                    <h3>ICU Occupancy</h3>
+                                    <p class="card-subtitle">Bed utilization & capacity</p>
+                                </div>
+                            </div>
+
+                            <div class="capacity-widget">
+                                <div class="capacity-circle-stat">
+                                    <div class="capacity-circle-inner">
+                                        <div class="capacity-num" id="strip-bed-capacity">42/50</div>
+                                        <div class="capacity-sub">Occupied</div>
+                                    </div>
+                                </div>
+
+                                <div class="capacity-metrics-list">
+                                    <div class="cap-item">
+                                        <span style="color: var(--text-secondary);">Available</span>
+                                        <span class="cap-val" style="color: var(--status-success);" id="strip-available-beds">8 Beds</span>
+                                    </div>
+                                    <div class="cap-item">
+                                        <span style="color: var(--text-secondary);">Population</span>
+                                        <span class="cap-val" id="strip-total-patients">3,600 Records</span>
+                                    </div>
+                                    <div class="cap-item">
+                                        <span style="color: var(--text-secondary);">Mode</span>
+                                        <span class="cap-val" style="color: var(--status-warning);">SIMULATED</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- 3. RIGHT BOTTOM CARD: RECENT DECISION AUDIT EVENTS -->
+                        <section class="ui-card">
+                            <div class="card-header">
+                                <div class="card-title-group">
+                                    <h3>Decision Audit</h3>
+                                    <p class="card-subtitle">Recent arbitration events</p>
+                                </div>
+                            </div>
+
+                            <div id="side-audit-events" style="display: flex; flex-direction: column; gap: 8px;">
+                                <div style="font-size: 12px; color: var(--text-secondary);">Loading decision log...</div>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </div>
 
-            <!-- TAB 2: SIMULATION VIEW (Polished to match Command Center Design System) -->
+            <!-- TAB 2: SIMULATION PANE -->
             <div class="tab-pane" id="pane-simulation">
-                <div class="view-header">
-                    <span class="header-eyebrow">SIMULATION / ARBITRATION</span>
-                    <h2 class="view-title">Test the queue under changing conditions</h2>
-                    <p class="view-desc">Execute real state transitions through CareGrid's priority and arbitration engine.</p>
-                </div>
-
-                <div class="sim-split">
-                    <div class="sim-controls-card">
-                        <span class="section-eyebrow">SCENARIO CONTROLS</span>
-                        <p class="card-desc">Trigger dynamic clinical events to evaluate real-time re-ranking deltas:</p>
-                        <div class="sim-grid">
-                            <button id="sim-act-critical" class="btn-ops primary">+ ADD EMERGENCY PATIENT</button>
-                            <button id="sim-act-spike" class="btn-ops warning">SEVERITY SPIKE (P-137517)</button>
-                            <button id="sim-act-advance" class="btn-ops info">ADVANCE WAIT CLOCK (+30M)</button>
-                            <button id="sim-act-discharge" class="btn-ops success">DISCHARGE TOP PATIENT</button>
-                            <button id="sim-act-reset" class="btn-ops danger">RESET SIMULATION</button>
+                <div class="ui-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h2>Simulation & Event Arbitration</h2>
+                            <p class="card-subtitle">Test queue re-ranking under changing clinical conditions</p>
                         </div>
                     </div>
 
-                    <div class="sim-results-card">
-                        <span class="section-eyebrow">BEFORE / AFTER ARBITRATION RESULT</span>
-                        <div id="sim-output-container">
-                            <p class="text-muted">Click any simulation scenario control to observe real engine re-ranking deltas.</p>
+                    <div style="display: grid; grid-template-columns: 320px 1fr; gap: 20px;">
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <button id="sim-act-critical" class="btn-ops" style="background: #059669; padding: 12px;">+ ADD EMERGENCY PATIENT</button>
+                            <button id="sim-act-spike" class="btn-ops" style="background: #d97706; padding: 12px;">SEVERITY SPIKE (P-137517)</button>
+                            <button id="sim-act-advance" class="btn-ops" style="background: #0284c7; padding: 12px;">ADVANCE WAIT CLOCK (+30M)</button>
+                            <button id="sim-act-discharge" class="btn-ops" style="background: #10b981; padding: 12px;">DISCHARGE TOP PATIENT</button>
+                            <button id="sim-act-reset" class="btn-ops" style="background: #dc2626; padding: 12px;">RESET SIMULATION</button>
+                        </div>
+
+                        <div id="sim-output-container" style="background: #f8fafc; border-radius: 14px; padding: 18px; border: 1px solid #e2e8f0;">
+                            <p style="font-size: 13px; color: var(--text-secondary);">Click any scenario control to evaluate real-time re-ranking deltas.</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- TAB 3: AUDIT VIEW (Polished to match Command Center Design System) -->
+            <!-- TAB 3: AUDIT LOG PANE -->
             <div class="tab-pane" id="pane-audit">
-                <div class="view-header">
-                    <span class="header-eyebrow">DECISION AUDIT</span>
-                    <h2 class="view-title">Trace every material change in the arbitration state</h2>
-                    <p class="view-desc">Immutable audit trail of state transitions, score recalculations, rank shifts, and tie-break decisions.</p>
-                </div>
+                <div class="ui-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h2>Immutable Decision Audit Trail</h2>
+                            <p class="card-subtitle">Complete chronological trace of queue re-rankings and tie-break decisions</p>
+                        </div>
+                    </div>
 
-                <div class="audit-timeline-container" id="audit-timeline-body">
-                    <p class="loading-state">Loading system audit trail...</p>
+                    <div id="audit-timeline-body" style="display: flex; flex-direction: column; gap: 12px;">
+                        <p style="font-size: 13px; color: var(--text-secondary);">Loading decision audit trail...</p>
+                    </div>
                 </div>
             </div>
 
-            <!-- TAB 4: METHODOLOGY VIEW (Preserved untouched) -->
+            <!-- TAB 4: METHODOLOGY PANE -->
             <div class="tab-pane" id="pane-methodology">
-                <div class="view-header">
-                    <span class="header-eyebrow">PRIORITIZATION METHODOLOGY</span>
-                    <h2 class="view-title">Mathematical and algorithmic specification</h2>
-                    <p class="view-desc">Transparent Input-Process-Output pipeline for critical care capacity decision support.</p>
-                </div>
-
-                <div class="methodology-flow">
-                    <div class="flow-step"><div class="step-num">01</div><div class="step-title">DATA INGESTION</div><div class="step-desc">Ingests clinical dataset records with explicit provenance tagging.</div></div>
-                    <div class="flow-arrow">→</div>
-                    <div class="flow-step"><div class="step-num">02</div><div class="step-title">SOFA NORMALIZATION</div><div class="step-desc">Normalizes raw SOFA score: clamp(SOFA / 20.0 * 100.0, 0, 100).</div></div>
-                    <div class="flow-arrow">→</div>
-                    <div class="flow-step"><div class="step-num">03</div><div class="step-title">WEIGHTED SCORING</div><div class="step-desc">Score = (Sev × W_sev) + (Surv × W_surv) + (Wait × W_wait).</div></div>
-                    <div class="flow-arrow">→</div>
-                    <div class="flow-step"><div class="step-num">04</div><div class="step-title">TIE-BREAKING</div><div class="step-desc">Resolves near ties (≤0.50) via 4-tier deterministic hierarchy.</div></div>
-                    <div class="flow-arrow">→</div>
-                    <div class="flow-step"><div class="step-num">05</div><div class="step-title">EXPLAINABILITY</div><div class="step-desc">Generates human-readable factor contribution and rank shift logs.</div></div>
-                </div>
-
-                <!-- Interactive Weight Configuration Form -->
-                <div class="weight-config-card">
-                    <h3>SCORING WEIGHT CONFIGURATION</h3>
-                    <form id="ops-weights-form">
-                        <div class="slider-group">
-                            <div class="slider-header">
-                                <label for="weight-sev">Severity Weight (SOFA Derived)</label>
-                                <span id="val-sev">0.50</span>
-                            </div>
-                            <input type="range" id="weight-sev" min="0" max="1" step="0.05" value="0.50">
+                <div class="ui-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h2>Prioritization Methodology</h2>
+                            <p class="card-subtitle">Mathematical formula & deterministic scoring pipeline</p>
                         </div>
+                    </div>
 
-                        <div class="slider-group">
-                            <div class="slider-header">
-                                <label for="weight-surv">Survival Likelihood Weight</label>
-                                <span id="val-surv">0.30</span>
+                    <div style="font-size: 13px; color: #334155; line-height: 1.6;">
+                        <p style="margin-bottom: 12px;"><strong>Score Formula:</strong> Priority Score = (Severity × W_sev) + (Survival × W_surv) + (Wait × W_wait)</p>
+                        <p style="margin-bottom: 12px;"><strong>SOFA Normalization:</strong> Severity = clamp(SOFA / 20.0 × 100.0, 0, 100)</p>
+                        <p><strong>Tie-Breaking Policy:</strong> Tier 1 Severity Contribution → Tier 2 Waiting Duration → Tier 3 Survival Potential → Tier 4 Patient ID.</p>
+                    </div>
+
+                    <div style="margin-top: 24px;">
+                        <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 12px;">Scoring Weight Configuration</h3>
+                        <form id="ops-weights-form" style="display: flex; flex-direction: column; gap: 14px;">
+                            <div>
+                                <label style="font-size: 12px; font-weight: 600;">Severity Weight (SOFA Derived): <span id="val-sev">0.50</span></label>
+                                <input type="range" id="weight-sev" min="0" max="1" step="0.05" value="0.50" style="width: 100%;">
                             </div>
-                            <input type="range" id="weight-surv" min="0" max="1" step="0.05" value="0.30">
-                        </div>
-
-                        <div class="slider-group">
-                            <div class="slider-header">
-                                <label for="weight-wait">Waiting Time Weight</label>
-                                <span id="val-wait">0.20</span>
+                            <div>
+                                <label style="font-size: 12px; font-weight: 600;">Survival Likelihood Weight: <span id="val-surv">0.30</span></label>
+                                <input type="range" id="weight-surv" min="0" max="1" step="0.05" value="0.30" style="width: 100%;">
                             </div>
-                            <input type="range" id="weight-wait" min="0" max="1" step="0.05" value="0.20">
-                        </div>
-
-                        <button type="submit" class="btn-ops primary">APPLY WEIGHTS & RE-RANK ENGINE</button>
-                    </form>
+                            <div>
+                                <label style="font-size: 12px; font-weight: 600;">Waiting Duration Weight: <span id="val-wait">0.20</span></label>
+                                <input type="range" id="weight-wait" min="0" max="1" step="0.05" value="0.20" style="width: 100%;">
+                            </div>
+                            <button type="submit" class="btn-ops" style="padding: 10px 16px;">APPLY WEIGHTS & RE-RANK ENGINE</button>
+                        </form>
+                    </div>
                 </div>
             </div>
 
-            <!-- TAB 5: RESEARCH VIEW (Polished to match Command Center Design System) -->
+            <!-- TAB 5: RESEARCH PANE -->
             <div class="tab-pane" id="pane-research">
-                <div class="view-header">
-                    <span class="header-eyebrow">RESEARCH & LITERATURE</span>
-                    <h2 class="view-title">Academic grounding and identified research gap</h2>
-                    <p class="view-desc">The evidence and reasoning behind CareGrid's proposed prioritization approach.</p>
-                </div>
-
-                <div class="research-grid">
-                    <div class="research-card">
-                        <span class="section-eyebrow">PROBLEM STATEMENT</span>
-                        <p>ICU capacity constraints during surge scenarios require transparent, objective, and auditable prioritization. Legacy manual queuing is vulnerable to human fatigue and subjective variation across shifts.</p>
+                <div class="ui-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h2>Academic Research & Literature Grounding</h2>
+                            <p class="card-subtitle">Prioritization literature and CareGrid clinical gap</p>
+                        </div>
                     </div>
 
-                    <div class="research-card">
-                        <span class="section-eyebrow">EXISTING APPROACHES</span>
-                        <p>Legacy systems rely on point-in-time organ dysfunction scores (SOFA, SAPS-I, NEWS2) or static paper triage guidelines. They fail to dynamically re-arbitrate candidate queues when waiting times advance or bed availability shifts.</p>
-                    </div>
-
-                    <div class="research-card">
-                        <span class="section-eyebrow">IDENTIFIED RESEARCH GAP</span>
-                        <p>CareGrid bridges the gap between physiological failure scoring and capacity management by combining SOFA-derived organ failure severity, survival likelihood, and waiting duration equity into an event-sourced deterministic arbitration engine.</p>
-                    </div>
-
-                    <div class="research-card">
-                        <span class="section-eyebrow">CAREGRID APPROACH & SAFEGUARD</span>
-                        <p>CareGrid operates strictly as a clinical decision-support research prototype. Final ICU admission and treatment decisions remain strictly under clinician control.</p>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <div style="background: #f8fafc; border-radius: 12px; padding: 16px;">
+                            <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">PROBLEM STATEMENT</h4>
+                            <p style="font-size: 12px; color: #475569;">ICU capacity constraints during surge scenarios require transparent, objective, and auditable prioritization.</p>
+                        </div>
+                        <div style="background: #f8fafc; border-radius: 12px; padding: 16px;">
+                            <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">EXISTING APPROACHES</h4>
+                            <p style="font-size: 12px; color: #475569;">Legacy systems rely on point-in-time organ failure scores (SOFA, SAPS-I) or static triage guidelines.</p>
+                        </div>
+                        <div style="background: #f8fafc; border-radius: 12px; padding: 16px;">
+                            <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">IDENTIFIED RESEARCH GAP</h4>
+                            <p style="font-size: 12px; color: #475569;">CareGrid bridges physiological failure scoring and capacity management by combining organ failure, survival likelihood, and waiting duration equity.</p>
+                        </div>
+                        <div style="background: #f8fafc; border-radius: 12px; padding: 16px;">
+                            <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">CLINICAL SAFEGUARD</h4>
+                            <p style="font-size: 12px; color: #475569;">CareGrid operates strictly as clinician decision support. Final ICU admission decisions remain under clinician control.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -340,55 +336,65 @@
         <div class="modal-card">
             <div class="modal-header">
                 <div>
-                    <span class="panel-eyebrow">CLINICAL PROFILE & ARBITRATION DETAIL</span>
-                    <h2 id="modal-patient-id">PATIENT P-139169</h2>
+                    <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.8px; color: var(--text-muted); text-transform: uppercase;">PATIENT CLINICAL REPORT</span>
+                    <h2 id="modal-patient-id" style="font-size: 22px; font-weight: 800; color: #0f172a;">PATIENT P-139169</h2>
                 </div>
-                <button id="modal-close-btn" class="modal-close">✕</button>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span class="status-badge critical" id="modal-status-badge">● CRITICAL</span>
+                    <button id="modal-close-btn" class="modal-close">✕</button>
+                </div>
             </div>
 
             <div class="modal-body">
-                <div class="score-hero-box" style="margin-bottom: 20px;">
-                    <div class="score-hero-main">
-                        <span class="score-hero-label">PRIORITY SCORE</span>
-                        <div class="score-hero-num" id="modal-priority-score">87.9</div>
+                <div class="selected-patient-hero">
+                    <div>
+                        <span class="rank-badge rank-1" id="modal-rank">RANK #1</span>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;" id="modal-rank-delta">-- Stable Position</div>
                     </div>
-                    <div class="score-hero-meta">
-                        <div><span class="meta-label">RANK</span> <span class="meta-val text-green" id="modal-rank">#1</span></div>
-                        <div><span class="meta-label">STATUS</span> <span class="meta-val" id="modal-status">Admitted</span></div>
-                    </div>
-                </div>
-
-                <div class="breakdown-section" style="margin-bottom: 20px;">
-                    <span class="section-eyebrow">FACTOR SCORE CONTRIBUTION BREAKDOWN</span>
-                    <div class="breakdown-list">
-                        <div class="breakdown-row">
-                            <span class="breakdown-name">Severity (SOFA Derived)</span>
-                            <div class="breakdown-bar-track"><div class="breakdown-bar-fill fill-sev" id="mbfill-sev"></div></div>
-                            <span class="breakdown-pts" id="modal-pts-sev">+50.0 pts</span>
-                        </div>
-                        <div class="breakdown-row">
-                            <span class="breakdown-name">Survival Likelihood</span>
-                            <div class="breakdown-bar-track"><div class="breakdown-bar-fill fill-surv" id="mbfill-surv"></div></div>
-                            <span class="breakdown-pts" id="modal-pts-surv">+20.5 pts</span>
-                        </div>
-                        <div class="breakdown-row">
-                            <span class="breakdown-name">Waiting Time Equity</span>
-                            <div class="breakdown-bar-track"><div class="breakdown-bar-fill fill-wait" id="mbfill-wait"></div></div>
-                            <span class="breakdown-pts" id="modal-pts-wait">+17.3 pts</span>
-                        </div>
+                    <div class="hero-score-box">
+                        <div class="hero-score-val" id="modal-priority-score">87.9</div>
+                        <div class="hero-score-lbl">PRIORITY SCORE</div>
                     </div>
                 </div>
 
-                <div class="explain-card" style="margin-bottom: 20px;">
+                <div style="margin-bottom: 16px;">
+                    <span class="sidebar-title">Clinical Indicators</span>
+                    <div class="metrics-bars-group">
+                        <div class="metric-bar-item">
+                            <div class="bar-header">
+                                <span class="bar-title">Severity (SOFA Derived)</span>
+                                <span class="bar-val" id="modal-sev-val">100.0</span>
+                            </div>
+                            <div class="bar-track"><div class="bar-fill" id="mbar-fill-sev" style="width: 100%;"></div></div>
+                        </div>
+
+                        <div class="metric-bar-item">
+                            <div class="bar-header">
+                                <span class="bar-title">Survival Likelihood</span>
+                                <span class="bar-val" id="modal-surv-val">68.5%</span>
+                            </div>
+                            <div class="bar-track"><div class="bar-fill" id="mbar-fill-surv" style="width: 68.5%;"></div></div>
+                        </div>
+
+                        <div class="metric-bar-item">
+                            <div class="bar-header">
+                                <span class="bar-title">Waiting Duration</span>
+                                <span class="bar-val" id="modal-wait-val">104 min</span>
+                            </div>
+                            <div class="bar-track"><div class="bar-fill" id="mbar-fill-wait" style="width: 86.6%;"></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="explain-card" id="modal-explain-card" style="margin-bottom: 16px;">
                     <span class="explain-eyebrow">DETERMINISTIC RANK EXPLANATION</span>
                     <p class="explain-text" id="modal-explain-text">High SOFA-derived severity is the primary contributor.</p>
-                    <span class="explain-rule" id="modal-tiebreak-rule">Standard Priority Score</span>
                 </div>
 
-                <div style="margin-bottom: 20px;">
-                    <span class="section-eyebrow">RAW CLINICAL PHYSIOLOGICAL PARAMETERS (X_TRAIN_2025.CSV)</span>
+                <div style="margin-bottom: 16px;">
+                    <span class="sidebar-title">Raw Physiological Parameters</span>
                     <div class="raw-param-grid" id="modal-raw-params">
-                        <!-- Populated dynamically -->
+                        <!-- Dynamic content -->
                     </div>
                 </div>
             </div>
