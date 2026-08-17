@@ -14,11 +14,16 @@ async function initApp() {
     setupModalListeners();
     setupIntelligenceListeners();
     setupV31IntelligenceListeners();
+    setupModalIntelTabs();
+    setupV32Listeners();
+    setupV33Listeners();
+    setupV35Listeners();
+    setupV36AttentionPanel();
+    setupIntelligenceTabRouting();
     await fetchOverview();
     await fetchPatientsQueue();
     await fetchSideAuditEvents();
 }
-
 
 function setupTabNavigation() {
     const navItems = document.querySelectorAll(".nav-item, .nav-tab");
@@ -742,3 +747,511 @@ async function fetchAuditTimeline() {
         console.error("Audit timeline fetch failed:", err);
     }
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL INTELLIGENCE TABS — switch between EXPLAIN / COMPARE / WHAT-IF / AUDIT
+// ══════════════════════════════════════════════════════════════════════════════
+function setupModalIntelTabs() {
+    document.querySelectorAll(".intel-tab-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            // Deactivate all
+            document.querySelectorAll(".intel-tab-btn").forEach(b => b.classList.remove("active"));
+            document.querySelectorAll(".intel-modal-pane").forEach(p => p.classList.remove("active"));
+            // Activate selected
+            btn.classList.add("active");
+            const pane = document.getElementById(`impane-${btn.dataset.imtab}`);
+            if (pane) pane.classList.add("active");
+            // Reset shared response panel on tab switch
+            const resp = document.getElementById("v31-response-panel");
+            const err  = document.getElementById("v31-error-panel");
+            if (resp) resp.style.display = "none";
+            if (err)  err.style.display  = "none";
+        });
+    });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// V3.2 — PATIENT COMPARISON
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Current ranked queue cache for comparison
+let cachedRankedQueue = [];
+
+async function runComparison(pidA, pidB) {
+    if (!pidA || !pidB) {
+        showModalIntelResponse("INSUFFICIENT DATA FOR COMPARISON\n\nBoth patients must be present in the current queue.", "CareGrid Priority Engine");
+        return;
+    }
+    showModalIntelResponse("Comparing patients…", "—");
+
+    try {
+        const res = await fetch("/api/intelligence/compare", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({patient_id_a: pidA, patient_id_b: pidB})
+        });
+        const data = await res.json();
+
+        if (data.status === "success") {
+            // Populate side-by-side display
+            populateCompareDisplay(data);
+            showModalIntelResponse(data.explanation, data.source);
+        } else {
+            showModalIntelError();
+        }
+    } catch (err) {
+        console.error("V3.2 compare error:", err);
+        showModalIntelError();
+    }
+}
+
+function populateCompareDisplay(data) {
+    const display = document.getElementById("v32-compare-display");
+    const colA    = document.getElementById("v32-col-a");
+    const colB    = document.getElementById("v32-col-b");
+    const diffEl  = document.getElementById("v32-biggest-diff");
+    if (!display || !colA || !colB) return;
+
+    const renderCol = (p) => `
+        <div class="v32-row"><span class="v32-row-label">Patient ID</span><span class="v32-row-val">${p.patient_id}</span></div>
+        <div class="v32-row"><span class="v32-row-label">Rank</span><span class="v32-row-val">#${p.rank}</span></div>
+        <div class="v32-row"><span class="v32-row-label">Priority Score</span><span class="v32-row-val">${p.priority_score}</span></div>
+        <div class="v32-row"><span class="v32-row-label">Severity</span><span class="v32-row-val">${p.severity}</span></div>
+        <div class="v32-row"><span class="v32-row-label">Survival</span><span class="v32-row-val">${p.survival_likelihood}%</span></div>
+        <div class="v32-row"><span class="v32-row-label">Waiting</span><span class="v32-row-val">${p.waiting_time_minutes} min</span></div>
+        <div class="v32-row"><span class="v32-row-label">Sev. Contribution</span><span class="v32-row-val">+${p.contributions.severity_contribution}</span></div>
+        <div class="v32-row"><span class="v32-row-label">Surv. Contribution</span><span class="v32-row-val">+${p.contributions.survival_contribution}</span></div>
+        <div class="v32-row"><span class="v32-row-label">Wait Contribution</span><span class="v32-row-val">+${p.contributions.waiting_contribution}</span></div>
+    `;
+
+    colA.innerHTML = renderCol(data.patient_a);
+    colB.innerHTML = renderCol(data.patient_b);
+    if (diffEl) {
+        diffEl.innerHTML = `<strong>Largest Difference:</strong> ${data.biggest_diff_factor} &nbsp;|&nbsp; Score Gap: <strong>${data.score_difference} pts</strong>`;
+    }
+    display.style.display = "block";
+}
+
+function setupV32Listeners() {
+    const btnAbove = document.getElementById("v32-btn-above");
+    const btnBelow = document.getElementById("v32-btn-below");
+    const btnAsk   = document.getElementById("v32-btn-ask");
+    const freeIn   = document.getElementById("v32-free-input");
+
+    if (btnAbove) {
+        btnAbove.addEventListener("click", async () => {
+            if (!selectedPatientId) return;
+            // Find patient above in cached queue
+            const idx = cachedRankedQueue.findIndex(p => p.patient_id === selectedPatientId);
+            if (idx > 0) {
+                await runComparison(selectedPatientId, cachedRankedQueue[idx - 1].patient_id);
+            } else {
+                showModalIntelResponse("This patient is already ranked #1 — no patient above.", "CareGrid Priority Engine");
+            }
+        });
+    }
+
+    if (btnBelow) {
+        btnBelow.addEventListener("click", async () => {
+            if (!selectedPatientId) return;
+            const idx = cachedRankedQueue.findIndex(p => p.patient_id === selectedPatientId);
+            if (idx >= 0 && idx < cachedRankedQueue.length - 1) {
+                await runComparison(selectedPatientId, cachedRankedQueue[idx + 1].patient_id);
+            } else {
+                showModalIntelResponse("No patient below this rank in the current queue.", "CareGrid Priority Engine");
+            }
+        });
+    }
+
+    if (btnAsk && freeIn) {
+        const doAsk = async () => {
+            const q = freeIn.value.trim();
+            if (!q || !selectedPatientId) return;
+            // Extract any second patient ID from question
+            const m = q.match(/P-?\d+/gi);
+            const pidB = m ? m.find(id => id.toUpperCase() !== selectedPatientId.toUpperCase()) : null;
+            const idx  = cachedRankedQueue.findIndex(p => p.patient_id === selectedPatientId);
+            const compareTo = pidB || (idx > 0 ? cachedRankedQueue[idx - 1].patient_id : null)
+                                   || (idx < cachedRankedQueue.length - 1 ? cachedRankedQueue[idx + 1].patient_id : null);
+            if (compareTo) await runComparison(selectedPatientId, compareTo);
+            else showModalIntelResponse("Could not identify a second patient to compare. Try 'Compare with patient above' or 'Compare with patient below'.", "CareGrid Intelligence");
+        };
+        btnAsk.addEventListener("click", doAsk);
+        freeIn.addEventListener("keydown", e => { if (e.key === "Enter") doAsk(); });
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// V3.3 / V3.4 — WHAT-IF SIMULATION + BEFORE/AFTER
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function runWhatIfScenario(action, patientId = null) {
+    // Capture BEFORE state
+    const beforeQueueRes = await fetch("/api/patients?limit=10");
+    const beforeData     = await beforeQueueRes.json();
+    const beforeQueue    = (beforeData.patients || []).slice(0, 5).map(p => ({
+        patient_id: p.patient_id, rank: p.rank, priority_score: p.priority_score
+    }));
+
+    // Render BEFORE list immediately
+    const beforeAfterEl = document.getElementById("v34-before-after");
+    const beforeList    = document.getElementById("v34-before-list");
+    if (beforeList) {
+        beforeList.innerHTML = beforeQueue.map(p =>
+            `<div>#${p.rank} &nbsp;${p.patient_id} &nbsp;<span style="color:#64748b;">${p.priority_score}</span></div>`
+        ).join("");
+    }
+
+    showModalIntelResponse("Running simulation…", "—");
+
+    try {
+        // Run the simulation via existing engine
+        const payload = {event_type: action};
+        if (action === "advance_time") payload.minutes = 30;
+        if (action === "severity_spike" && patientId) payload.patient_id = patientId;
+
+        const simRes  = await fetch("/api/simulation/event", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        });
+        const simData = await simRes.json();
+
+        if (!simData || simData.status === "error") {
+            showModalIntelError();
+            return;
+        }
+
+        // Capture AFTER state
+        const afterQueueRes = await fetch("/api/patients?limit=10");
+        const afterData     = await afterQueueRes.json();
+        const afterQueue    = (afterData.patients || []).slice(0, 5).map(p => ({
+            patient_id: p.patient_id, rank: p.rank, priority_score: p.priority_score
+        }));
+
+        // Render AFTER list
+        const afterList = document.getElementById("v34-after-list");
+        if (afterList) {
+            afterList.innerHTML = afterQueue.map(p => {
+                const was = beforeQueue.find(b => b.patient_id === p.patient_id);
+                const arrow = !was ? '<span class="v34-new"> NEW</span>'
+                            : p.rank < was.rank ? '<span class="v34-up"> ↑</span>'
+                            : p.rank > was.rank ? '<span class="v34-down"> ↓</span>' : '';
+                return `<div>#${p.rank} &nbsp;${p.patient_id} &nbsp;<span style="color:#64748b;">${p.priority_score}</span>${arrow}</div>`;
+            }).join("");
+        }
+
+        // Change table
+        renderChangeTable(beforeQueue, afterQueue, simData);
+
+        if (beforeAfterEl) beforeAfterEl.style.display = "block";
+
+        // Update "Last Simulation" badge in Intel tab
+        const badge = document.getElementById("intel-last-sim-badge");
+        if (badge) badge.textContent = action.replace(/_/g, " ").toUpperCase();
+
+        // Get AI explanation via /api/intelligence/explain-simulation
+        const explainRes = await fetch("/api/intelligence/explain-simulation", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({sim_result: simData, before_queue: beforeQueue})
+        });
+        const explainData = await explainRes.json();
+        showModalIntelResponse(
+            explainData.answer || "Simulation completed.",
+            explainData.source || "CareGrid Simulation Engine"
+        );
+
+        // Refresh main queue display
+        await fetchPatientsQueue();
+        await fetchSideAuditEvents();
+
+    } catch (err) {
+        console.error("V3.3 what-if error:", err);
+        showModalIntelError();
+    }
+}
+
+function renderChangeTable(before, after, simData) {
+    const el = document.getElementById("v34-change-table");
+    if (!el) return;
+
+    // Combine all patient IDs seen in before or after
+    const allIds = [...new Set([...before.map(p => p.patient_id), ...after.map(p => p.patient_id)])];
+    const rows = allIds.slice(0, 8).map(pid => {
+        const b = before.find(p => p.patient_id === pid);
+        const a = after.find(p => p.patient_id === pid);
+        if (!b) return `<tr><td>${pid}</td><td>—</td><td>#${a.rank}</td><td class="v34-new">NEW</td></tr>`;
+        if (!a) return `<tr><td>${pid}</td><td>#${b.rank}</td><td>—</td><td class="v34-down">REMOVED</td></tr>`;
+        const change = b.rank - a.rank;
+        const cls    = change > 0 ? "v34-up" : change < 0 ? "v34-down" : "";
+        const label  = change > 0 ? `↑${change}` : change < 0 ? `↓${Math.abs(change)}` : "—";
+        return `<tr><td>${pid}</td><td>#${b.rank} / ${b.priority_score}</td><td>#${a.rank} / ${a.priority_score}</td><td class="${cls}">${label}</td></tr>`;
+    }).join("");
+
+    el.innerHTML = `
+        <table class="v34-change-table">
+            <thead><tr><th>PATIENT</th><th>BEFORE</th><th>AFTER</th><th>CHANGE</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    `;
+}
+
+function setupV33Listeners() {
+    const actions = {
+        "v33-btn-new-critical": "new_critical_patient",
+        "v33-btn-discharge":    "discharge_top",
+        "v33-btn-advance":      "advance_time",
+        "v33-btn-severity":     "severity_spike"
+    };
+
+    Object.entries(actions).forEach(([id, action]) => {
+        const btn = document.getElementById(id);
+        if (btn) {
+            btn.addEventListener("click", () => {
+                const patientId = action === "severity_spike" ? selectedPatientId : null;
+                runWhatIfScenario(action, patientId);
+            });
+        }
+    });
+
+    const freeIn = document.getElementById("v33-free-input");
+    const runBtn = document.getElementById("v33-btn-ask");
+    if (freeIn && runBtn) {
+        const doRun = async () => {
+            const q = freeIn.value.trim();
+            if (!q) return;
+            // Interpret via backend
+            const res = await fetch("/api/intelligence/whatif", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({question: q, patient_id: selectedPatientId})
+            });
+            const data = await res.json();
+            if (data.status === "ready") {
+                const s = data.scenario;
+                await runWhatIfScenario(s.action, s.patient_id || selectedPatientId);
+            } else {
+                showModalIntelResponse(data.message || "SIMULATION COULD NOT BE COMPLETED", "CareGrid Intelligence");
+            }
+        };
+        runBtn.addEventListener("click", doRun);
+        freeIn.addEventListener("keydown", e => { if (e.key === "Enter") doRun(); });
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// V3.5 — AUDIT INTELLIGENCE
+// ══════════════════════════════════════════════════════════════════════════════
+
+function setupV35Listeners() {
+    const btnRecent  = document.getElementById("v35-btn-recent");
+    const btnPatient = document.getElementById("v35-btn-patient");
+
+    if (btnRecent) {
+        btnRecent.addEventListener("click", async () => {
+            showModalIntelResponse("Loading audit summary…", "—");
+            try {
+                const res  = await fetch("/api/intelligence/audit-summary", {
+                    method: "POST", headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({limit: 10})
+                });
+                const data = await res.json();
+                showModalIntelResponse(data.answer || "AUDIT INFORMATION UNAVAILABLE", data.source || "CareGrid Audit Log");
+            } catch (e) { showModalIntelError(); }
+        });
+    }
+
+    if (btnPatient) {
+        btnPatient.addEventListener("click", async () => {
+            if (!selectedPatientId) {
+                showModalIntelResponse("No patient selected.", "CareGrid Audit Log");
+                return;
+            }
+            showModalIntelResponse(`Loading audit events for ${selectedPatientId}…`, "—");
+            try {
+                const res  = await fetch("/api/intelligence/audit-summary", {
+                    method: "POST", headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({patient_id: selectedPatientId, limit: 10})
+                });
+                const data = await res.json();
+                showModalIntelResponse(data.answer || "AUDIT INFORMATION UNAVAILABLE", data.source || "CareGrid Audit Log");
+            } catch (e) { showModalIntelError(); }
+        });
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// V3.6 — ATTENTION REQUIRED PANEL
+// ══════════════════════════════════════════════════════════════════════════════
+
+function setupV36AttentionPanel() {
+    const refreshBtn = document.getElementById("btn-refresh-attention");
+    if (refreshBtn) {
+        refreshBtn.addEventListener("click", loadAttentionSignals);
+    }
+    // Load when Intelligence tab is opened
+    document.querySelectorAll(".nav-item").forEach(item => {
+        if (item.dataset.tab === "intelligence") {
+            item.addEventListener("click", loadAttentionSignals);
+        }
+    });
+}
+
+async function loadAttentionSignals() {
+    const container = document.getElementById("attention-signals-container");
+    if (!container) return;
+    container.innerHTML = `<p style="font-size: 12px; color: var(--text-secondary);">Scanning CareGrid state for attention signals...</p>`;
+    try {
+        const res  = await fetch("/api/intelligence/attention");
+        const data = await res.json();
+
+        if (data.status !== "success") {
+            container.innerHTML = `<p style="font-size:12px; color:var(--text-muted);">ATTENTION SIGNALS UNAVAILABLE</p>`;
+            return;
+        }
+
+        if (!data.signals || data.signals.length === 0) {
+            container.innerHTML = `<div class="attention-no-signals">NO SIGNIFICANT ATTENTION SIGNALS — Queue operating within normal parameters</div>`;
+            return;
+        }
+
+        const typeLabels = {
+            near_tie:              "NEAR TIE",
+            major_rank_change:     "MAJOR RANK CHANGE",
+            waiting_time_attention:"WAITING-TIME ATTENTION",
+            critical_queue_load:   "CRITICAL QUEUE LOAD"
+        };
+
+        container.innerHTML = data.signals.map((sig, idx) => `
+            <div class="attention-signal-card severity-${sig.severity}" id="attention-sig-${idx}">
+                <div class="attention-signal-type">${typeLabels[sig.type] || sig.type}</div>
+                <div class="attention-signal-msg">${sig.message}</div>
+                <div class="attention-signal-footer">
+                    <span style="font-size:10px; color:var(--text-muted);">SOURCE: CareGrid Current State</span>
+                    <button class="v31-action-btn" style="padding:4px 10px; font-size:9px;"
+                        onclick="explainSignal(${idx})">WHY IS THIS FLAGGED?</button>
+                </div>
+                <div class="attention-explain-response" id="attention-explain-${idx}" style="display:none; margin-top:8px; font-size:11px; font-family:var(--font-mono); color:#1e293b; white-space:pre-wrap; background:#fff; padding:8px; border-radius:6px; border:1px solid #e2e8f0;"></div>
+            </div>
+        `).join("");
+
+        // Store signals for explain
+        window._attentionSignals = data.signals;
+
+    } catch (err) {
+        console.error("Attention signals error:", err);
+        container.innerHTML = `<p style="font-size:12px; color:var(--text-muted);">ATTENTION SIGNALS UNAVAILABLE</p>`;
+    }
+}
+
+async function explainSignal(idx) {
+    if (!window._attentionSignals || !window._attentionSignals[idx]) return;
+    const signal     = window._attentionSignals[idx];
+    const responseEl = document.getElementById(`attention-explain-${idx}`);
+    if (!responseEl) return;
+
+    responseEl.style.display = "block";
+    responseEl.textContent = "Querying CareGrid Intelligence…";
+
+    try {
+        const res  = await fetch("/api/intelligence/explain-signal", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({signal})
+        });
+        const data = await res.json();
+        responseEl.textContent = data.answer || "INTELLIGENCE UNAVAILABLE";
+    } catch (err) {
+        responseEl.textContent = "CAREGRID INTELLIGENCE TEMPORARILY UNAVAILABLE";
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INTELLIGENCE TAB — Route suggested questions 4-6 through V3.3/V3.5
+// ══════════════════════════════════════════════════════════════════════════════
+
+function setupIntelligenceTabRouting() {
+    // btn-q4: What changed recently? → V3.5 audit summary
+    const q4 = document.getElementById("btn-q4");
+    if (q4) {
+        q4.addEventListener("click", async () => {
+            document.getElementById("intel-answer-text").textContent = "Loading audit summary…";
+            try {
+                const res  = await fetch("/api/intelligence/audit-summary", {
+                    method: "POST", headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({limit: 10})
+                });
+                const data = await res.json();
+                document.getElementById("intel-answer-text").textContent = data.answer || "AUDIT INFORMATION UNAVAILABLE";
+                document.getElementById("intel-source-tag").textContent = `SOURCE: ${data.source || "CareGrid Audit Log"}`;
+                document.getElementById("intel-evidence-box").style.display = "none";
+            } catch (e) {
+                document.getElementById("intel-answer-text").textContent = "AUDIT INFORMATION UNAVAILABLE";
+            }
+        });
+    }
+
+    // btn-q5: New critical patient → V3.3 whatif
+    const q5 = document.getElementById("btn-q5");
+    if (q5) {
+        q5.addEventListener("click", async () => {
+            const ansEl = document.getElementById("intel-answer-text");
+            ansEl.textContent = "Interpreting scenario…";
+            const res  = await fetch("/api/intelligence/whatif", {
+                method: "POST", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({question: "What happens if a new critical patient enters?"})
+            });
+            const data = await res.json();
+            if (data.status === "ready") {
+                ansEl.textContent = `Scenario: ${data.scenario.description}\n\nUse the patient detail WHAT-IF tab to run this simulation against the live CareGrid engine.`;
+            } else {
+                ansEl.textContent = data.message || "Scenario not supported.";
+            }
+            document.getElementById("intel-source-tag").textContent = "SOURCE: CareGrid Intelligence";
+        });
+    }
+
+    // btn-q6: Discharge top patient → V3.3 whatif
+    const q6 = document.getElementById("btn-q6");
+    if (q6) {
+        q6.addEventListener("click", async () => {
+            const ansEl = document.getElementById("intel-answer-text");
+            ansEl.textContent = "Interpreting scenario…";
+            const res  = await fetch("/api/intelligence/whatif", {
+                method: "POST", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({question: "What happens if the top patient is discharged?"})
+            });
+            const data = await res.json();
+            if (data.status === "ready") {
+                ansEl.textContent = `Scenario: ${data.scenario.description}\n\nUse the patient detail WHAT-IF tab to run this simulation.`;
+            } else {
+                ansEl.textContent = data.message || "Scenario not supported.";
+            }
+            document.getElementById("intel-source-tag").textContent = "SOURCE: CareGrid Intelligence";
+        });
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SHARED MODAL RESPONSE HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+function showModalIntelResponse(text, source) {
+    const panel = document.getElementById("v31-response-panel");
+    const textEl  = document.getElementById("v31-response-text");
+    const sourceEl = document.getElementById("v31-response-source");
+    const errEl  = document.getElementById("v31-error-panel");
+    if (panel)  { panel.style.display = "block"; }
+    if (textEl)   textEl.textContent   = text;
+    if (sourceEl) sourceEl.textContent = source || "—";
+    if (errEl)  errEl.style.display = "none";
+}
+
+function showModalIntelError() {
+    const panel = document.getElementById("v31-response-panel");
+    const errEl = document.getElementById("v31-error-panel");
+    if (panel)  panel.style.display = "none";
+    if (errEl)  errEl.style.display = "block";
+}
+
+
