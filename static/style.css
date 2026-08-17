@@ -166,11 +166,11 @@ body {
     padding: 0 4px;
 }
 
-.header-eyebrow {
-    font-size: 11px;
+.header-eyebrow, .view-header .header-eyebrow, .panel-eyebrow, .section-eyebrow {
+    font-size: 10px;
     font-weight: 700;
     letter-spacing: 1.2px;
-    color: var(--text-muted);
+    color: var(--accent-green);
     text-transform: uppercase;
     margin-bottom: 6px;
     display: block;
@@ -188,7 +188,7 @@ body {
     color: var(--accent-green);
 }
 
-.header-subtitle {
+.header-subtitle, .view-desc {
     font-size: 14px;
     color: var(--text-secondary);
     max-width: 720px;
@@ -218,7 +218,23 @@ body {
     color: var(--accent-green);
 }
 
-/* 3. System Metrics Strip (3 Cards Grid, Source Data Removed) */
+/* View Header Standard */
+.view-header {
+    background: var(--panel-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.view-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 4px;
+}
+
+/* 3. System Metrics Strip */
 .metrics-strip {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -288,16 +304,6 @@ body {
     margin-bottom: 16px;
 }
 
-.panel-eyebrow {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    color: var(--accent-green);
-    text-transform: uppercase;
-    display: block;
-    margin-bottom: 2px;
-}
-
 .panel-title h2, .panel-title h3 {
     font-size: 18px;
     font-weight: 700;
@@ -336,6 +342,10 @@ body {
     border: none;
 }
 .btn-ops.primary:hover { background: var(--accent-green); color: #000; }
+.btn-ops.warning { color: var(--status-warning); }
+.btn-ops.info { color: var(--accent-green); }
+.btn-ops.success { color: var(--status-success); }
+.btn-ops.danger { color: var(--status-critical); }
 
 /* Table Styling */
 .table-wrapper {
@@ -535,16 +545,6 @@ body {
 }
 
 /* Transparent Score Breakdown */
-.section-eyebrow {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    display: block;
-    margin-bottom: 10px;
-}
-
 .breakdown-list {
     display: flex;
     flex-direction: column;
@@ -584,8 +584,9 @@ body {
 
 /* Why This Rank Box */
 .explain-card {
-    background: rgba(52, 211, 153, 0.05);
-    border: 1px solid rgba(52, 211, 153, 0.2);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--accent-green);
     border-radius: 10px;
     padding: 14px;
 }
@@ -613,6 +614,42 @@ body {
     margin-top: 6px;
     display: block;
 }
+
+/* Raw Parameters Grid in Modal */
+.raw-param-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.raw-param-box {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    padding: 10px 12px;
+}
+
+.raw-param-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.raw-param-val {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.text-critical { color: var(--status-critical); }
+.text-warning { color: var(--status-warning); }
+.text-success { color: var(--status-success); }
 
 /* Provenance Tags */
 .provenance-grid {
@@ -647,54 +684,37 @@ body {
 .badge.derived { background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); }
 .badge.simulated { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
 
-/* Simulation Pane */
+/* Simulation Pane Styling */
 .sim-split {
     display: grid;
     grid-template-columns: 340px 1fr;
     gap: 24px;
-    margin-top: 20px;
 }
 
-.sim-controls-card, .sim-results-card, .view-header, .research-content-card, .weight-config-card {
+.sim-controls-card, .sim-results-card {
     background: var(--panel-bg);
     border: 1px solid var(--card-border);
     border-radius: 12px;
     padding: 20px;
 }
 
+.card-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
 .sim-grid {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    margin-top: 16px;
 }
 
-.btn-ops-sim {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--card-border);
-    color: var(--text-primary);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 700;
-    padding: 10px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    text-align: left;
-    transition: all 0.15s ease;
-}
-
-.btn-ops-sim:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--accent-green); }
-.btn-ops-sim.warning { color: var(--status-warning); }
-.btn-ops-sim.info { color: var(--accent-green); }
-.btn-ops-sim.success { color: var(--status-success); }
-.btn-ops-sim.danger { color: var(--status-critical); }
-
-/* Audit Timeline */
+/* Audit Timeline Styling */
 .audit-timeline-container {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    margin-top: 20px;
 }
 
 .timeline-item {
@@ -725,7 +745,27 @@ body {
     color: var(--text-secondary);
 }
 
-/* Methodology Flow */
+/* Research Grid Styling */
+.research-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+}
+
+.research-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.research-card p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+/* Methodology Flow (Preserved untouched) */
 .methodology-flow {
     display: flex;
     align-items: center;
@@ -769,9 +809,19 @@ body {
     color: var(--text-muted);
 }
 
-/* Sliders */
 .weight-config-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 20px;
     margin-top: 24px;
+}
+
+.weight-config-card h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 16px;
 }
 
 .slider-group {

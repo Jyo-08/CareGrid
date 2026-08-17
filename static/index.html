@@ -45,7 +45,7 @@
             </div>
         </header>
 
-        <!-- System Metrics Strip (Source Data Removed) -->
+        <!-- System Metrics Strip -->
         <section class="metrics-strip">
             <div class="strip-card">
                 <div class="strip-label">PATIENT RECORDS</div>
@@ -66,10 +66,10 @@
 
         <!-- Main Tab Workspace -->
         <main class="main-workspace">
-            <!-- TAB 1: COMMAND CENTER (Priority Queue + Patient Detail Panel) -->
+            <!-- TAB 1: COMMAND CENTER -->
             <div class="tab-pane active" id="pane-command-center">
                 <div class="ops-split-layout">
-                    <!-- Left: Live Priority Queue Table (Visual Centerpiece) -->
+                    <!-- Left: Live Priority Queue Table -->
                     <div class="queue-panel">
                         <div class="panel-header">
                             <div class="panel-title">
@@ -115,7 +115,7 @@
                             <span class="rank-indicator" id="panel-rank-badge">RANK #1</span>
                         </div>
 
-                        <!-- Main Score Highlight & Rank Movement -->
+                        <!-- Score Hero Box -->
                         <div class="score-hero-box">
                             <div class="score-hero-main">
                                 <span class="score-hero-label">TOTAL PRIORITY SCORE</span>
@@ -133,7 +133,7 @@
                             </div>
                         </div>
 
-                        <!-- Compact Clinical Metrics with Progress Bars -->
+                        <!-- Metrics Bars Group -->
                         <div class="metrics-bars-group">
                             <div class="metric-bar-item">
                                 <div class="bar-header">
@@ -206,29 +206,29 @@
                 </div>
             </div>
 
-            <!-- TAB 2: SIMULATION VIEW -->
+            <!-- TAB 2: SIMULATION VIEW (Polished to match Command Center Design System) -->
             <div class="tab-pane" id="pane-simulation">
                 <div class="view-header">
                     <span class="header-eyebrow">SIMULATION / ARBITRATION</span>
-                    <h2>Test the queue under changing operational conditions</h2>
-                    <p>Execute real state transitions through CareGrid's priority and arbitration engine.</p>
+                    <h2 class="view-title">Test the queue under changing conditions</h2>
+                    <p class="view-desc">Execute real state transitions through CareGrid's priority and arbitration engine.</p>
                 </div>
 
                 <div class="sim-split">
                     <div class="sim-controls-card">
-                        <h3>SCENARIO CONTROLS</h3>
-                        <p>Trigger dynamic events to evaluate real-time re-ranking:</p>
+                        <span class="section-eyebrow">SCENARIO CONTROLS</span>
+                        <p class="card-desc">Trigger dynamic clinical events to evaluate real-time re-ranking deltas:</p>
                         <div class="sim-grid">
-                            <button id="sim-act-critical" class="btn-ops-sim">+ ADD EMERGENCY PATIENT</button>
-                            <button id="sim-act-spike" class="btn-ops-sim warning">⚡ SEVERITY SPIKE (P-137517)</button>
-                            <button id="sim-act-advance" class="btn-ops-sim info">⏳ ADVANCE WAIT CLOCK (+30M)</button>
-                            <button id="sim-act-discharge" class="btn-ops-sim success">🏥 DISCHARGE TOP PATIENT</button>
-                            <button id="sim-act-reset" class="btn-ops-sim danger">🔄 RESET SIMULATION</button>
+                            <button id="sim-act-critical" class="btn-ops primary">+ ADD EMERGENCY PATIENT</button>
+                            <button id="sim-act-spike" class="btn-ops warning">⚡ SEVERITY SPIKE (P-137517)</button>
+                            <button id="sim-act-advance" class="btn-ops info">⏳ ADVANCE WAIT CLOCK (+30M)</button>
+                            <button id="sim-act-discharge" class="btn-ops success">🏥 DISCHARGE TOP PATIENT</button>
+                            <button id="sim-act-reset" class="btn-ops danger">🔄 RESET SIMULATION</button>
                         </div>
                     </div>
 
                     <div class="sim-results-card">
-                        <h3>BEFORE / AFTER ARBITRATION RESULT</h3>
+                        <span class="section-eyebrow">BEFORE / AFTER ARBITRATION RESULT</span>
                         <div id="sim-output-container">
                             <p class="text-muted">Click any simulation scenario control to observe real engine re-ranking deltas.</p>
                         </div>
@@ -236,12 +236,12 @@
                 </div>
             </div>
 
-            <!-- TAB 3: AUDIT VIEW -->
+            <!-- TAB 3: AUDIT VIEW (Polished to match Command Center Design System) -->
             <div class="tab-pane" id="pane-audit">
                 <div class="view-header">
                     <span class="header-eyebrow">DECISION AUDIT</span>
-                    <h2>Trace every material change in the arbitration state</h2>
-                    <p>Immutable audit trail of state transitions, score recalculations, rank shifts, and tie-break decisions.</p>
+                    <h2 class="view-title">Trace every material change in the arbitration state</h2>
+                    <p class="view-desc">Immutable audit trail of state transitions, score recalculations, rank shifts, and tie-break decisions.</p>
                 </div>
 
                 <div class="audit-timeline-container" id="audit-timeline-body">
@@ -249,12 +249,12 @@
                 </div>
             </div>
 
-            <!-- TAB 4: METHODOLOGY VIEW -->
+            <!-- TAB 4: METHODOLOGY VIEW (Preserved untouched) -->
             <div class="tab-pane" id="pane-methodology">
                 <div class="view-header">
                     <span class="header-eyebrow">PRIORITIZATION METHODOLOGY</span>
-                    <h2>Mathematical and algorithmic specification</h2>
-                    <p>Transparent Input-Process-Output pipeline for critical care capacity decision support.</p>
+                    <h2 class="view-title">Mathematical and algorithmic specification</h2>
+                    <p class="view-desc">Transparent Input-Process-Output pipeline for critical care capacity decision support.</p>
                 </div>
 
                 <div class="methodology-flow">
@@ -302,25 +302,34 @@
                 </div>
             </div>
 
-            <!-- TAB 5: RESEARCH VIEW -->
+            <!-- TAB 5: RESEARCH VIEW (Polished to match Command Center Design System) -->
             <div class="tab-pane" id="pane-research">
                 <div class="view-header">
                     <span class="header-eyebrow">RESEARCH & LITERATURE</span>
-                    <h2>Academic grounding and identified research gap</h2>
+                    <h2 class="view-title">Academic grounding and identified research gap</h2>
+                    <p class="view-desc">The evidence and reasoning behind CareGrid's proposed prioritization approach.</p>
                 </div>
 
-                <div class="research-content-card">
-                    <h3>PROBLEM STATEMENT</h3>
-                    <p>ICU capacity constraints during surge scenarios require transparent, objective, and auditable prioritization. Legacy manual queuing is vulnerable to human fatigue and subjective variation.</p>
+                <div class="research-grid">
+                    <div class="research-card">
+                        <span class="section-eyebrow">PROBLEM STATEMENT</span>
+                        <p>ICU capacity constraints during surge scenarios require transparent, objective, and auditable prioritization. Legacy manual queuing is vulnerable to human fatigue and subjective variation across shifts.</p>
+                    </div>
 
-                    <h3>EXISTING APPROACHES</h3>
-                    <p>Legacy systems rely on point-in-time mortality scores (SOFA, SAPS-I, NEWS2) or static paper-based triage protocols. They do not dynamically re-arbitrate candidate queues when waiting times advance or bed availability shifts.</p>
+                    <div class="research-card">
+                        <span class="section-eyebrow">EXISTING APPROACHES</span>
+                        <p>Legacy systems rely on point-in-time organ dysfunction scores (SOFA, SAPS-I, NEWS2) or static paper triage guidelines. They fail to dynamically re-arbitrate candidate queues when waiting times advance or bed availability shifts.</p>
+                    </div>
 
-                    <h3>IDENTIFIED RESEARCH GAP & CAREGRID APPROACH</h3>
-                    <p>CareGrid bridges the gap between physiological failure scoring and capacity management by combining SOFA-derived organ failure severity, survival likelihood, and waiting duration equity into an event-sourced deterministic arbitration engine.</p>
+                    <div class="research-card">
+                        <span class="section-eyebrow">IDENTIFIED RESEARCH GAP</span>
+                        <p>CareGrid bridges the gap between physiological failure scoring and capacity management by combining SOFA-derived organ failure severity, survival likelihood, and waiting duration equity into an event-sourced deterministic arbitration engine.</p>
+                    </div>
 
-                    <h3>CLINICAL SAFEGUARD</h3>
-                    <p>CareGrid operates as a clinical decision-support system. Final ICU admission and treatment decisions remain strictly under clinician control.</p>
+                    <div class="research-card">
+                        <span class="section-eyebrow">CAREGRID APPROACH & SAFEGUARD</span>
+                        <p>CareGrid operates strictly as a clinical decision-support research prototype. Final ICU admission and treatment decisions remain strictly under clinician control.</p>
+                    </div>
                 </div>
             </div>
         </main>
@@ -378,7 +387,7 @@
 
                 <div style="margin-bottom: 20px;">
                     <span class="section-eyebrow">RAW CLINICAL PHYSIOLOGICAL PARAMETERS (X_TRAIN_2025.CSV)</span>
-                    <div class="provenance-grid" id="modal-raw-params">
+                    <div class="raw-param-grid" id="modal-raw-params">
                         <!-- Populated dynamically -->
                     </div>
                 </div>

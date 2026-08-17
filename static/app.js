@@ -291,7 +291,10 @@ window.openPatientModal = async function(patientId) {
     document.getElementById("modal-patient-id").textContent = `PATIENT ${patient.patient_id}`;
     document.getElementById("modal-rank").textContent = `#${patient.rank}`;
     document.getElementById("modal-priority-score").textContent = patient.priority_score.toFixed(1);
-    document.getElementById("modal-status").textContent = patient.patient_status;
+    const statusElem = document.getElementById("modal-status");
+    statusElem.textContent = patient.patient_status;
+    statusElem.className = patient.patient_status === "Critical" ? "meta-val text-critical" :
+                           patient.patient_status === "Admitted" ? "meta-val text-success" : "meta-val text-warning";
 
     const waitPct = Math.min(100, (patient.waiting_time_minutes / 120.0) * 100);
     const ptsSev = patient.severity_contribution || (patient.severity * 0.5);
@@ -321,18 +324,18 @@ window.openPatientModal = async function(patientId) {
         console.error("Modal explainability error:", err);
     }
 
-    // Render raw clinical parameters
+    // Render raw clinical parameters as clean dark neutral cards
     const rawContainer = document.getElementById("modal-raw-params");
     const raw = patient.raw_clinical_params || {};
     rawContainer.innerHTML = `
-        <div class="p-item"><span class="p-label">SOFA Score</span> <span class="badge source">${patient.sofa_score}</span></div>
-        <div class="p-item"><span class="p-label">SAPS-I Score</span> <span class="badge source">${raw.SAPS_first || '14'}</span></div>
-        <div class="p-item"><span class="p-label">GCS (Glasgow Coma)</span> <span class="badge source">${raw.GCS_first || '15'}</span></div>
-        <div class="p-item"><span class="p-label">Heart Rate (HR)</span> <span class="badge source">${raw.HR_first || '88'} bpm</span></div>
-        <div class="p-item"><span class="p-label">Mean Arterial BP</span> <span class="badge source">${raw.MAP_first || '75'} mmHg</span></div>
-        <div class="p-item"><span class="p-label">Creatinine</span> <span class="badge source">${raw.Creatinine_first || '1.1'} mg/dL</span></div>
-        <div class="p-item"><span class="p-label">WBC Count</span> <span class="badge source">${raw.WBC_first || '9.4'} k/uL</span></div>
-        <div class="p-item"><span class="p-label">Arrival Date</span> <span class="badge source">${patient.arrival_time || '2025-03-16'}</span></div>
+        <div class="raw-param-box"><span class="raw-param-label">SOFA Score</span> <span class="raw-param-val">${patient.sofa_score}</span></div>
+        <div class="raw-param-box"><span class="raw-param-label">SAPS-I Score</span> <span class="raw-param-val">${raw.SAPS_first || '14'}</span></div>
+        <div class="raw-param-box"><span class="raw-param-label">GCS Score</span> <span class="raw-param-val">${raw.GCS_first || '15'}</span></div>
+        <div class="raw-param-box"><span class="raw-param-label">Heart Rate (HR)</span> <span class="raw-param-val">${raw.HR_first || '88'} bpm</span></div>
+        <div class="raw-param-box"><span class="raw-param-label">Mean Arterial BP</span> <span class="raw-param-val">${raw.MAP_first || '75'} mmHg</span></div>
+        <div class="raw-param-box"><span class="raw-param-label">Creatinine</span> <span class="raw-param-val">${raw.Creatinine_first || '1.1'} mg/dL</span></div>
+        <div class="raw-param-box"><span class="raw-param-label">WBC Count</span> <span class="raw-param-val">${raw.WBC_first || '9.4'} k/uL</span></div>
+        <div class="raw-param-box"><span class="raw-param-label">Arrival Date</span> <span class="raw-param-val">${patient.arrival_time || '2025-03-16'}</span></div>
     `;
 
     modal.classList.remove("hidden");
@@ -345,25 +348,30 @@ function renderSimResults(data) {
     const movedDown = data.moved_down || [];
 
     container.innerHTML = `
-        <div style="font-family: var(--font-mono); font-size: 12px; margin-bottom: 14px;">
-            <span class="badge source">${evt.event_type || 'SIMULATION_EVENT'}</span>
-            <span style="color: var(--accent-green); margin-left: 8px;">${evt.reason || 'Event processed'}</span>
+        <div style="margin-bottom: 16px; padding: 12px; background: rgba(52, 211, 153, 0.05); border: 1px solid rgba(52, 211, 153, 0.2); border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <span class="badge source">${evt.event_type || 'SIMULATION_EVENT'}</span>
+                <span style="font-family: var(--font-mono); font-weight: 700; font-size: 12px; color: var(--accent-green);">${evt.patient_id ? `Patient ${evt.patient_id}` : 'Queue Action'}</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">${evt.reason || 'Arbitration engine re-ranked candidate population.'}</p>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
             <div>
-                <span class="section-eyebrow" style="color: var(--accent-green);">MOVED UP IN RANK (${movedUp.length})</span>
-                ${movedUp.length === 0 ? '<p class="text-muted" style="font-size:12px;">None</p>' : movedUp.slice(0, 5).map(m => `
-                    <div style="font-family: var(--font-mono); font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--card-border);">
-                        ${m.patient_id}: #${m.previous_rank} → <span style="color: var(--accent-green);">#${m.new_rank}</span> (+${m.rank_delta})
+                <span class="section-eyebrow" style="color: var(--accent-green);">PROMOTED IN RANK (${movedUp.length})</span>
+                ${movedUp.length === 0 ? '<p style="font-size:12px; color:var(--text-muted);">No patients promoted</p>' : movedUp.slice(0, 5).map(m => `
+                    <div style="font-family: var(--font-mono); font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between;">
+                        <span style="color: #fff; font-weight:600;">${m.patient_id}</span>
+                        <span>#${m.previous_rank} → <span class="text-green" style="font-weight:700;">#${m.new_rank}</span> (+${m.rank_delta})</span>
                     </div>
                 `).join('')}
             </div>
             <div>
-                <span class="section-eyebrow" style="color: var(--status-warning);">MOVED DOWN IN RANK (${movedDown.length})</span>
-                ${movedDown.length === 0 ? '<p class="text-muted" style="font-size:12px;">None</p>' : movedDown.slice(0, 5).map(m => `
-                    <div style="font-family: var(--font-mono); font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--card-border);">
-                        ${m.patient_id}: #${m.previous_rank} → <span style="color: var(--status-warning);">#${m.new_rank}</span> (${m.rank_delta})
+                <span class="section-eyebrow" style="color: var(--status-warning);">DEMOTED IN RANK (${movedDown.length})</span>
+                ${movedDown.length === 0 ? '<p style="font-size:12px; color:var(--text-muted);">No patients demoted</p>' : movedDown.slice(0, 5).map(m => `
+                    <div style="font-family: var(--font-mono); font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--card-border); display: flex; justify-content: space-between;">
+                        <span style="color: #fff; font-weight:600;">${m.patient_id}</span>
+                        <span>#${m.previous_rank} → <span style="color: var(--status-warning); font-weight:700;">#${m.new_rank}</span> (${m.rank_delta})</span>
                     </div>
                 `).join('')}
             </div>
@@ -386,16 +394,16 @@ async function fetchAuditTimeline() {
             container.innerHTML = events.map(evt => `
                 <div class="timeline-item">
                     <div>
-                        <span class="timeline-time">${evt.timestamp.split('T')[1].split('.')[0]}</span>
-                        <span class="badge source" style="margin-left: 10px;">${evt.event_type}</span>
-                        <div class="timeline-event" style="margin-top: 4px;">
-                            ${evt.patient_id ? `Patient ${evt.patient_id}` : 'System Action'}
-                            ${evt.previous_rank ? `<span style="color: var(--accent-green); font-family: var(--font-mono); margin-left: 8px;">#${evt.previous_rank} → #${evt.new_rank}</span>` : ''}
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <span class="timeline-time">${evt.timestamp.split('T')[1].split('.')[0]}</span>
+                            <span class="badge source">${evt.event_type}</span>
+                            ${evt.patient_id ? `<span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #fff;">PATIENT ${evt.patient_id}</span>` : ''}
                         </div>
                         <div class="timeline-reason">${evt.reason}</div>
                     </div>
-                    <div>
-                        <span class="badge derived">${evt.source}</span>
+                    <div style="text-align: right;">
+                        ${evt.previous_rank ? `<div style="font-family: var(--font-mono); font-size: 12px; font-weight: 800; color: var(--accent-green);">#${evt.previous_rank} → #${evt.new_rank}</div>` : ''}
+                        <span class="badge derived" style="margin-top: 4px; display: inline-block;">${evt.source}</span>
                     </div>
                 </div>
             `).join('');
