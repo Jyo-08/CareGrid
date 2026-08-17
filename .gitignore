@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# System & IDE
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.vscode/
+.idea/
+
+# Logs & Temporary Files
+*.log
+.tempmediaStorage/
+scratch/
+
+# Environment Variables & Secrets
+.env
+.env.local
+*.pem
+*.key
