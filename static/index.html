@@ -73,7 +73,7 @@
                 </div>
             </header>
 
-            <!-- TAB 1: COMMAND CENTER (Left Column Queue Table, Right Column Intelligence & Status) -->
+            <!-- TAB 1: COMMAND CENTER (Left Column Queue Table, Right Column Beds Top -> Patient Below -> Audit) -->
             <div class="tab-pane active" id="pane-command-center">
                 <div class="dashboard-grid-2col">
                     <!-- LEFT COLUMN: LIVE PRIORITY QUEUE TABLE (FULL HEIGHT, NOTHING BELOW IT) -->
@@ -113,9 +113,43 @@
                         </div>
                     </section>
 
-                    <!-- RIGHT COLUMN: PATIENT INTELLIGENCE + ICU OCCUPANCY + RECENT DECISION AUDIT -->
+                    <!-- RIGHT COLUMN: 1. BEDS TOP -> 2. PATIENT INTELLIGENCE BELOW -> 3. DECISION AUDIT -->
                     <div style="grid-column: 2 / 3; display: flex; flex-direction: column; gap: 20px;">
-                        <!-- 1. RIGHT TOP CARD: SELECTED PATIENT INTELLIGENCE -->
+                        <!-- 1. RIGHT TOP CARD: ICU BED OCCUPANCY / NUMBER OF BEDS -->
+                        <section class="ui-card">
+                            <div class="card-header">
+                                <div class="card-title-group">
+                                    <h3>ICU Occupancy</h3>
+                                    <p class="card-subtitle">Bed utilization & capacity</p>
+                                </div>
+                            </div>
+
+                            <div class="capacity-widget">
+                                <div class="capacity-circle-stat">
+                                    <div class="capacity-circle-inner">
+                                        <div class="capacity-num" id="strip-bed-capacity">42/50</div>
+                                        <div class="capacity-sub">Occupied</div>
+                                    </div>
+                                </div>
+
+                                <div class="capacity-metrics-list">
+                                    <div class="cap-item">
+                                        <span style="color: var(--text-secondary);">Available</span>
+                                        <span class="cap-val" style="color: var(--status-success);" id="strip-available-beds">8 Beds</span>
+                                    </div>
+                                    <div class="cap-item">
+                                        <span style="color: var(--text-secondary);">Population</span>
+                                        <span class="cap-val" id="strip-total-patients">3,600 Records</span>
+                                    </div>
+                                    <div class="cap-item">
+                                        <span style="color: var(--text-secondary);">Mode</span>
+                                        <span class="cap-val" style="color: var(--status-warning);">SIMULATED</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- 2. RIGHT SECOND CARD: SELECTED PATIENT INTELLIGENCE -->
                         <section class="ui-card">
                             <div class="card-header">
                                 <div class="card-title-group">
@@ -165,40 +199,6 @@
                             <div class="explain-card" id="panel-explain-card">
                                 <span class="explain-eyebrow">RANK EXPLANATION</span>
                                 <p class="explain-text" id="panel-explain-text">High SOFA-derived severity is the primary contributor.</p>
-                            </div>
-                        </section>
-
-                        <!-- 2. RIGHT MIDDLE CARD: ICU BED OCCUPANCY / CAPACITY -->
-                        <section class="ui-card">
-                            <div class="card-header">
-                                <div class="card-title-group">
-                                    <h3>ICU Occupancy</h3>
-                                    <p class="card-subtitle">Bed utilization & capacity</p>
-                                </div>
-                            </div>
-
-                            <div class="capacity-widget">
-                                <div class="capacity-circle-stat">
-                                    <div class="capacity-circle-inner">
-                                        <div class="capacity-num" id="strip-bed-capacity">42/50</div>
-                                        <div class="capacity-sub">Occupied</div>
-                                    </div>
-                                </div>
-
-                                <div class="capacity-metrics-list">
-                                    <div class="cap-item">
-                                        <span style="color: var(--text-secondary);">Available</span>
-                                        <span class="cap-val" style="color: var(--status-success);" id="strip-available-beds">8 Beds</span>
-                                    </div>
-                                    <div class="cap-item">
-                                        <span style="color: var(--text-secondary);">Population</span>
-                                        <span class="cap-val" id="strip-total-patients">3,600 Records</span>
-                                    </div>
-                                    <div class="cap-item">
-                                        <span style="color: var(--text-secondary);">Mode</span>
-                                        <span class="cap-val" style="color: var(--status-warning);">SIMULATED</span>
-                                    </div>
-                                </div>
                             </div>
                         </section>
 

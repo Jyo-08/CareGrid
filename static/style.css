@@ -600,20 +600,21 @@ body {
     transition: width 0.3s ease;
 }
 
-/* Why This Rank Explanation Card */
+/* Rank Explanation Card */
 .explain-card {
-    background: #f8fafc;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
     border-left: 4px solid var(--accent-green);
     border-radius: 12px;
-    padding: 14px;
-    margin-bottom: 16px;
+    padding: 12px 14px;
+    margin-top: 4px;
 }
 
 .explain-eyebrow {
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.8px;
-    color: var(--text-muted);
+    color: #64748b;
     text-transform: uppercase;
     margin-bottom: 4px;
     display: block;
@@ -621,8 +622,10 @@ body {
 
 .explain-text {
     font-size: 12px;
-    color: #334155;
-    line-height: 1.4;
+    color: #1e293b;
+    font-weight: 500;
+    line-height: 1.5;
+    font-family: var(--font-sans);
 }
 
 /* Provenance Grid */
