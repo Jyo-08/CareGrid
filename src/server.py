@@ -200,6 +200,27 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
                     "message": f"CareGrid Intelligence Unavailable: {str(e)}"
                 }, 500)
 
+        elif path == "/api/intelligence/ask-patient":
+            patient_id = data.get("patient_id", "")
+            mode = data.get("mode", "why_ranked")
+            free_question = data.get("question", "")
+            if not patient_id:
+                self.send_json_response({"status": "error", "message": "patient_id is required"}, 400)
+                return
+            try:
+                res = intelligence_engine.ask_about_patient(
+                    patient_id=patient_id,
+                    mode=mode,
+                    free_question=free_question
+                )
+                self.send_json_response(res)
+            except Exception as e:
+                self.send_json_response({
+                    "status": "error",
+                    "message": f"CareGrid Patient Intelligence Unavailable: {str(e)}"
+                }, 500)
+
+
         elif path == "/api/priority-weights":
             try:
                 w_sev = float(data.get("weight_severity", 0.50))

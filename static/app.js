@@ -13,10 +13,12 @@ async function initApp() {
     setupEventListeners();
     setupModalListeners();
     setupIntelligenceListeners();
+    setupV31IntelligenceListeners();
     await fetchOverview();
     await fetchPatientsQueue();
     await fetchSideAuditEvents();
 }
+
 
 function setupTabNavigation() {
     const navItems = document.querySelectorAll(".nav-item, .nav-tab");
@@ -131,6 +133,23 @@ function setupEventListeners() {
             }
         });
     }
+
+    const btnFullProf = document.getElementById("btn-open-full-profile");
+    if (btnFullProf) {
+        btnFullProf.addEventListener("click", () => {
+            if (selectedPatientId) {
+                openPatientModal(selectedPatientId);
+            }
+        });
+    }
+
+    const pTabs = document.querySelectorAll(".panel-tab-btn");
+    pTabs.forEach(tab => {
+        tab.addEventListener("click", () => {
+            pTabs.forEach(t => t.classList.remove("active"));
+            tab.classList.add("active");
+        });
+    });
 }
 
 function setupIntelligenceListeners() {
@@ -286,6 +305,18 @@ async function fetchOverview() {
             document.querySelectorAll("#strip-total-patients").forEach(el => el.textContent = data.total_patients.toLocaleString());
             document.querySelectorAll("#strip-bed-capacity").forEach(el => el.textContent = `${data.occupied_beds}/${data.total_beds}`);
             document.querySelectorAll("#strip-available-beds").forEach(el => el.textContent = `${data.available_beds} Available`);
+
+            const kpiTotal = document.getElementById("kpi-total-patients");
+            const kpiCrit = document.getElementById("kpi-critical-patients");
+            const kpiWait = document.getElementById("kpi-waiting-patients");
+            const kpiBed = document.getElementById("kpi-bed-occupancy");
+            const kpiAvail = document.getElementById("kpi-available-beds");
+
+            if (kpiTotal) kpiTotal.textContent = data.total_patients.toLocaleString();
+            if (kpiCrit) kpiCrit.textContent = data.critical_patients;
+            if (kpiWait) kpiWait.textContent = data.waiting_patients;
+            if (kpiBed) kpiBed.textContent = `${data.occupied_beds}/${data.total_beds}`;
+            if (kpiAvail) kpiAvail.textContent = `${data.available_beds} Beds Available`;
         }
     } catch (err) {
         console.error("Overview fetch failed:", err);
@@ -326,16 +357,25 @@ function renderQueueTable(patients) {
         const rankBadgeClass = p.rank === 1 ? "rank-badge rank-1" : "rank-badge";
         const statusBadgeClass = p.patient_status === "Critical" ? "status-badge critical" :
                                  p.patient_status === "Admitted" ? "status-badge admitted" : "status-badge waiting";
+        const scoreBarColor = p.severity >= 70.0 ? "var(--status-critical)" :
+                              p.severity >= 40.0 ? "var(--status-warning)" : "var(--status-success)";
 
         return `
-            <tr class="${isSelected}" onclick="selectPatientRow('${p.patient_id}', true)" id="p-row-${p.patient_id}">
+            <tr class="${isSelected}" onclick="selectPatientRow('${p.patient_id}', false)" id="p-row-${p.patient_id}">
                 <td><span class="${rankBadgeClass}">#${p.rank}</span></td>
                 <td class="patient-id-cell">${p.patient_id}</td>
-                <td class="score-cell">${p.priority_score.toFixed(1)}</td>
+                <td><span class="${statusBadgeClass}">● ${p.patient_status.toUpperCase()}</span></td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="score-cell">${p.priority_score.toFixed(1)}</span>
+                        <div style="width: 44px; height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden; flex-shrink: 0;">
+                            <div style="height: 100%; width: ${Math.min(100, p.priority_score)}%; background: ${scoreBarColor};"></div>
+                        </div>
+                    </div>
+                </td>
                 <td>${p.severity}</td>
                 <td>${p.survival_likelihood}%</td>
                 <td>${p.waiting_time_minutes} min</td>
-                <td><span class="${statusBadgeClass}">● ${p.patient_status.toUpperCase()}</span></td>
                 <td><button class="btn-ops" onclick="event.stopPropagation(); openPatientModal('${p.patient_id}')">VIEW</button></td>
             </tr>
         `;
@@ -489,7 +529,120 @@ window.openPatientModal = async function(patientId) {
     `;
 
     modal.classList.remove("hidden");
+
+    // ── V3.1: Populate score breakdown table ───────────────────────
+    populateV31Breakdown(patient);
+    // Reset response panel on new patient open
+    const respPanel = document.getElementById("v31-response-panel");
+    const errPanel  = document.getElementById("v31-error-panel");
+    if (respPanel) respPanel.style.display = "none";
+    if (errPanel)  errPanel.style.display  = "none";
 };
+
+// ── V3.1: Populate the static score breakdown from patient data ──────────────
+function populateV31Breakdown(patient) {
+    const weights = { severity: 0.50, survival: 0.30, waiting: 0.20 };
+    const sevContrib  = +(patient.severity * weights.severity).toFixed(1);
+    const survContrib = +(patient.survival_likelihood * weights.survival).toFixed(1);
+    const waitRaw     = Math.min(100.0, patient.waiting_time_minutes / 1.2);
+    const waitContrib = +(waitRaw * weights.waiting).toFixed(1);
+
+    const contrib = { severity: sevContrib, survival: survContrib, waiting: waitContrib };
+    const dominantKey = Object.entries(contrib).sort((a,b) => b[1]-a[1])[0][0];
+    const dominantLabel = { severity: "Severity", survival: "Survival Likelihood", waiting: "Waiting Duration" }[dominantKey];
+
+    const sevValEl   = document.getElementById("v31-sev-val");
+    const survValEl  = document.getElementById("v31-surv-val");
+    const waitValEl  = document.getElementById("v31-wait-val");
+    const sevCEl     = document.getElementById("v31-sev-contrib");
+    const survCEl    = document.getElementById("v31-surv-contrib");
+    const waitCEl    = document.getElementById("v31-wait-contrib");
+    const domEl      = document.getElementById("v31-dominant");
+
+    if (sevValEl)  sevValEl.textContent  = patient.severity;
+    if (survValEl) survValEl.textContent = `${patient.survival_likelihood}%`;
+    if (waitValEl) waitValEl.textContent = `${patient.waiting_time_minutes} min`;
+    if (sevCEl)    sevCEl.textContent    = `+${sevContrib} pts`;
+    if (survCEl)   survCEl.textContent   = `+${survContrib} pts`;
+    if (waitCEl)   waitCEl.textContent   = `+${waitContrib} pts`;
+    if (domEl)     domEl.textContent     = dominantLabel;
+}
+
+// ── V3.1: Ask CareGrid Intelligence about the currently-open patient ─────────
+async function askPatientIntelligence(mode, freeQuestion = "") {
+    if (!selectedPatientId) return;
+
+    const responsePanel = document.getElementById("v31-response-panel");
+    const responseText  = document.getElementById("v31-response-text");
+    const responseSource = document.getElementById("v31-response-source");
+    const errPanel      = document.getElementById("v31-error-panel");
+
+    // Disable all action buttons while loading
+    document.querySelectorAll(".v31-action-btn").forEach(b => b.classList.add("v31-loading"));
+    if (responsePanel) {
+        responsePanel.style.display = "block";
+        responseText.textContent = "Querying CareGrid Intelligence…";
+        responseSource.textContent = "—";
+    }
+    if (errPanel) errPanel.style.display = "none";
+
+    try {
+        const res = await fetch("/api/intelligence/ask-patient", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                patient_id: selectedPatientId,
+                mode: mode,
+                question: freeQuestion
+            })
+        });
+        const data = await res.json();
+
+        if (data.status === "success") {
+            if (responseText)   responseText.textContent   = data.answer;
+            if (responseSource) responseSource.textContent = data.source || "CareGrid Priority Engine";
+            if (responsePanel)  responsePanel.style.display = "block";
+        } else {
+            if (responsePanel) responsePanel.style.display = "none";
+            if (errPanel)      errPanel.style.display = "block";
+        }
+    } catch (err) {
+        console.error("V3.1 patient intelligence error:", err);
+        if (responsePanel) responsePanel.style.display = "none";
+        if (errPanel)      errPanel.style.display = "block";
+    } finally {
+        document.querySelectorAll(".v31-action-btn").forEach(b => b.classList.remove("v31-loading"));
+    }
+}
+
+// ── V3.1: Setup Intelligence Listeners (called from initApp) ──────────────────
+function setupV31IntelligenceListeners() {
+    // Quick action buttons
+    document.querySelectorAll(".v31-action-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const mode = btn.dataset.mode;
+            if (mode) askPatientIntelligence(mode);
+        });
+    });
+
+    // Free-text ASK button
+    const askBtn   = document.getElementById("v31-btn-ask");
+    const freeInput = document.getElementById("v31-free-input");
+
+    if (askBtn && freeInput) {
+        askBtn.addEventListener("click", () => {
+            const q = freeInput.value.trim();
+            if (q) askPatientIntelligence("free", q);
+        });
+        freeInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                const q = freeInput.value.trim();
+                if (q) askPatientIntelligence("free", q);
+            }
+        });
+    }
+}
+
 
 async function fetchSideAuditEvents() {
     const container = document.getElementById("side-audit-events");

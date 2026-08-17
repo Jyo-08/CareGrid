@@ -76,15 +76,66 @@
                 </div>
             </header>
 
-            <!-- TAB 1: COMMAND CENTER (Left Column Queue Table, Right Column Beds Top -> Patient Below -> Audit) -->
+            <!-- TAB 1: COMMAND CENTER -->
             <div class="tab-pane active" id="pane-command-center">
+                <!-- TOP SUMMARY METRICS ROW (Inspired by Reference Image KPI Cards) -->
+                <div class="summary-metrics-grid">
+                    <!-- Metric 1: Total Patients -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box" style="background: #e0f2fe; color: #0284c7;">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                        </div>
+                        <div class="kpi-body">
+                            <span class="kpi-title">Total Patients</span>
+                            <div class="kpi-value" id="kpi-total-patients">3,600</div>
+                            <span class="kpi-sub">Active cohort population</span>
+                        </div>
+                    </div>
+
+                    <!-- Metric 2: Critical Patients -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box" style="background: #fee2e2; color: #dc2626;">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        </div>
+                        <div class="kpi-body">
+                            <span class="kpi-title">Critical Severity</span>
+                            <div class="kpi-value" style="color: var(--status-critical);" id="kpi-critical-patients">174</div>
+                            <span class="kpi-sub">SOFA derived ≥ 70.0</span>
+                        </div>
+                    </div>
+
+                    <!-- Metric 3: Waiting Patients -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box" style="background: #fef3c7; color: #d97706;">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 16 14"></polyline></svg>
+                        </div>
+                        <div class="kpi-body">
+                            <span class="kpi-title">Waiting For ICU</span>
+                            <div class="kpi-value" style="color: var(--status-warning);" id="kpi-waiting-patients">42</div>
+                            <span class="kpi-sub">Pending bed arbitration</span>
+                        </div>
+                    </div>
+
+                    <!-- Metric 4: ICU Capacity Status -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box" style="background: #d1fae5; color: #059669;">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"></path></svg>
+                        </div>
+                        <div class="kpi-body">
+                            <span class="kpi-title">ICU Occupancy</span>
+                            <div class="kpi-value" style="color: #0f172a;" id="kpi-bed-occupancy">42/50</div>
+                            <span class="kpi-sub" style="color: var(--status-success);" id="kpi-available-beds">8 Beds Available</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="dashboard-grid-2col">
-                    <!-- LEFT COLUMN: LIVE PRIORITY QUEUE TABLE (FULL HEIGHT, NOTHING BELOW IT) -->
+                    <!-- LEFT COLUMN: LIVE PRIORITY QUEUE TABLE -->
                     <section class="ui-card" style="grid-column: 1 / 2;">
                         <div class="card-header">
                             <div class="card-title-group">
-                                <h2>Live Priority Queue</h2>
-                                <p class="card-subtitle" id="queue-status-text">Top 50 Patient Records · Real-time Dynamic Reranking</p>
+                                <h2>Patient Prioritization</h2>
+                                <p class="card-subtitle" id="queue-status-text">Top 50 Patient Records · Dynamic Reranking Engine</p>
                             </div>
                             <div class="card-filter-pills">
                                 <button class="filter-pill active" id="filter-all">All</button>
@@ -99,11 +150,11 @@
                                     <tr>
                                         <th>RANK</th>
                                         <th>PATIENT ID</th>
-                                        <th>PRIORITY</th>
+                                        <th>STATUS</th>
+                                        <th>PRIORITY SCORE</th>
                                         <th>SEVERITY</th>
                                         <th>SURVIVAL</th>
                                         <th>WAIT TIME</th>
-                                        <th>STATUS</th>
                                         <th>ACTION</th>
                                     </tr>
                                 </thead>
@@ -116,50 +167,25 @@
                         </div>
                     </section>
 
-                    <!-- RIGHT COLUMN: 1. BEDS TOP -> 2. PATIENT INTELLIGENCE BELOW -> 3. DECISION AUDIT -->
+                    <!-- RIGHT COLUMN: 1. ICU OCCUPANCY TOP -> 2. SELECTED PATIENT DETAIL PANEL -> 3. DECISION AUDIT -->
                     <div style="grid-column: 2 / 3; display: flex; flex-direction: column; gap: 20px;">
-                        <!-- 1. RIGHT TOP CARD: ICU BED OCCUPANCY / NUMBER OF BEDS -->
+
+
+                        <!-- 2. RIGHT SECOND CARD: SELECTED PATIENT DETAIL PANEL (Matching Reference Selected Patient) -->
                         <section class="ui-card">
-                            <div class="card-header">
+                            <div class="card-header" style="margin-bottom: 8px;">
                                 <div class="card-title-group">
-                                    <h3>ICU Occupancy</h3>
-                                    <p class="card-subtitle">Bed utilization & capacity</p>
-                                </div>
-                            </div>
-
-                            <div class="capacity-widget">
-                                <div class="capacity-circle-stat">
-                                    <div class="capacity-circle-inner">
-                                        <div class="capacity-num" id="strip-bed-capacity">42/50</div>
-                                        <div class="capacity-sub">Occupied</div>
-                                    </div>
-                                </div>
-
-                                <div class="capacity-metrics-list">
-                                    <div class="cap-item">
-                                        <span style="color: var(--text-secondary);">Available</span>
-                                        <span class="cap-val" style="color: var(--status-success);" id="strip-available-beds">8 Beds</span>
-                                    </div>
-                                    <div class="cap-item">
-                                        <span style="color: var(--text-secondary);">Population</span>
-                                        <span class="cap-val" id="strip-total-patients">3,600 Records</span>
-                                    </div>
-                                    <div class="cap-item">
-                                        <span style="color: var(--text-secondary);">Mode</span>
-                                        <span class="cap-val" style="color: var(--status-warning);">SIMULATED</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        <!-- 2. RIGHT SECOND CARD: SELECTED PATIENT INTELLIGENCE -->
-                        <section class="ui-card">
-                            <div class="card-header">
-                                <div class="card-title-group">
-                                    <h3>Patient Intelligence</h3>
+                                    <h3>Selected Patient</h3>
                                     <p class="card-subtitle" id="panel-patient-id">PATIENT P-139169</p>
                                 </div>
                                 <span class="status-badge admitted" id="panel-status-badge">● ADMITTED</span>
+                            </div>
+
+                            <!-- Panel Sub-Tabs -->
+                            <div class="panel-tabs-row">
+                                <button class="panel-tab-btn active" id="ptab-overview">Overview</button>
+                                <button class="panel-tab-btn" id="ptab-breakdown">Breakdown</button>
+                                <button class="panel-tab-btn" id="ptab-explanation">Why #1?</button>
                             </div>
 
                             <div class="selected-patient-hero">
@@ -176,7 +202,7 @@
                             <div class="metrics-bars-group">
                                 <div class="metric-bar-item">
                                     <div class="bar-header">
-                                        <span class="bar-title">Severity</span>
+                                        <span class="bar-title">Severity (SOFA Derived)</span>
                                         <span class="bar-val" id="panel-sev-val">100.0</span>
                                     </div>
                                     <div class="bar-track"><div class="bar-fill" id="bar-fill-sev" style="width: 100%;"></div></div>
@@ -184,7 +210,7 @@
 
                                 <div class="metric-bar-item">
                                     <div class="bar-header">
-                                        <span class="bar-title">Survival</span>
+                                        <span class="bar-title">Survival Likelihood</span>
                                         <span class="bar-val" id="panel-surv-val">68.5%</span>
                                     </div>
                                     <div class="bar-track"><div class="bar-fill" id="bar-fill-surv" style="width: 68.5%;"></div></div>
@@ -192,17 +218,19 @@
 
                                 <div class="metric-bar-item">
                                     <div class="bar-header">
-                                        <span class="bar-title">Wait Duration</span>
+                                        <span class="bar-title">Waiting Duration</span>
                                         <span class="bar-val" id="panel-wait-val">104 min</span>
                                     </div>
                                     <div class="bar-track"><div class="bar-fill" id="bar-fill-wait" style="width: 86.6%;"></div></div>
                                 </div>
                             </div>
 
-                            <div class="explain-card" id="panel-explain-card">
+                            <div class="explain-card" id="panel-explain-card" style="margin-bottom: 14px;">
                                 <span class="explain-eyebrow">RANK EXPLANATION</span>
                                 <p class="explain-text" id="panel-explain-text">High SOFA-derived severity is the primary contributor.</p>
                             </div>
+
+                            <button id="btn-open-full-profile" class="btn-ops" style="width: 100%; padding: 10px; background: #0f172a; text-align: center;">VIEW FULL PROFILE</button>
                         </section>
 
                         <!-- 3. RIGHT BOTTOM CARD: RECENT DECISION AUDIT EVENTS -->
@@ -458,9 +486,83 @@
                         <!-- Dynamic content -->
                     </div>
                 </div>
+
+                <!-- ─────────────────────────────────────────────────── -->
+                <!-- V3.1 — CAREGRID INTELLIGENCE MODULE                 -->
+                <!-- ─────────────────────────────────────────────────── -->
+                <div style="border-top: 1px solid #e2e8f0; margin: 20px 0 16px;"></div>
+
+                <div id="modal-v31-intelligence">
+                    <!-- Header -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+                        <div>
+                            <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted);">CAREGRID INTELLIGENCE — V3.1</span>
+                            <h4 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 2px 0 0;">Ask CareGrid About This Patient</h4>
+                        </div>
+                        <span style="font-size: 10px; font-weight: 700; color: var(--accent-green); background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 20px; padding: 3px 10px; letter-spacing: 0.5px;">GROUNDED</span>
+                    </div>
+
+                    <!-- Score Breakdown Table -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;">
+                        <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); display: block; margin-bottom: 8px;">PRIORITY SCORE BREAKDOWN</span>
+                        <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 6px 16px; align-items: center;">
+                            <span style="font-size: 12px; color: #475569; font-weight: 600;">Severity (SOFA-derived)</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; color: #0f172a;" id="v31-sev-val">—</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--status-critical);" id="v31-sev-contrib">+—</span>
+
+                            <span style="font-size: 12px; color: #475569; font-weight: 600;">Survival Likelihood</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; color: #0f172a;" id="v31-surv-val">—</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--status-warning);" id="v31-surv-contrib">+—</span>
+
+                            <span style="font-size: 12px; color: #475569; font-weight: 600;">Waiting Duration Equity</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; color: #0f172a;" id="v31-wait-val">—</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #3b82f6;" id="v31-wait-contrib">+—</span>
+                        </div>
+                        <div style="border-top: 1px solid #e2e8f0; margin-top: 8px; padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px;">Dominant Factor</span>
+                            <span style="font-size: 12px; font-weight: 700; color: #0f172a;" id="v31-dominant">—</span>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div style="margin-bottom: 12px;">
+                        <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); display: block; margin-bottom: 8px;">QUICK ACTIONS</span>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <button class="v31-action-btn" id="v31-btn-why-ranked" data-mode="why_ranked">WHY IS THIS PATIENT RANKED HERE?</button>
+                            <button class="v31-action-btn" id="v31-btn-drivers" data-mode="drivers">WHAT DRIVES THIS PRIORITY?</button>
+                            <button class="v31-action-btn" id="v31-btn-simple" data-mode="simple">EXPLAIN THIS SIMPLY</button>
+                            <button class="v31-action-btn" id="v31-btn-why-not-1" data-mode="why_not_1">WHY IS THIS PATIENT NOT #1?</button>
+                        </div>
+                    </div>
+
+                    <!-- Free-text query -->
+                    <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+                        <input type="text" id="v31-free-input" placeholder="Ask about this patient… e.g. What contributes most to this score?" style="flex: 1; padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12px; font-family: var(--font-sans); color: #0f172a; background: #fff; outline: none;">
+                        <button id="v31-btn-ask" style="padding: 9px 16px; background: #0f172a; color: #fff; border: none; border-radius: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; cursor: pointer;">ASK</button>
+                    </div>
+
+                    <!-- AI Response Panel -->
+                    <div id="v31-response-panel" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
+                            <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); display: inline-block;"></span>
+                            <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--accent-green);">AI RESPONSE</span>
+                        </div>
+                        <div id="v31-response-text" style="font-size: 12px; line-height: 1.7; color: #1e293b; white-space: pre-wrap; font-family: var(--font-mono);"></div>
+                        <div style="border-top: 1px solid #e2e8f0; margin-top: 12px; padding-top: 8px; display: flex; align-items: center; justify-content: space-between;">
+                            <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted);">SOURCE</span>
+                            <span style="font-size: 10px; font-family: var(--font-mono); color: #475569;" id="v31-response-source">—</span>
+                        </div>
+                    </div>
+
+                    <!-- Error / Unavailable state -->
+                    <div id="v31-error-panel" style="display: none; padding: 10px 14px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; font-size: 12px; color: #92400e;">
+                        CAREGRID INTELLIGENCE UNAVAILABLE — Patient data and scoring remain fully operational.
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+
 
     <script src="app.js"></script>
 </body>
