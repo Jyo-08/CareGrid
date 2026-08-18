@@ -1,89 +1,452 @@
-# CAREGRID V2 — INTELLIGENT ICU BED ARBITRATION & PRIORITIZATION ENGINE
+# CareGrid
 
-**CareGrid V2** is a rubric-maximizing research and decision-support implementation for intelligent ICU bed arbitration and critical care prioritization.
+## Clinical Priority Intelligence for Dynamic ICU Queue Management
 
-Building directly on the clean V1 dataset foundation, CareGrid V2 introduces dynamic event-driven arbitration, deterministic multi-tier tie-breaking, real-time scenario simulation, clinical explainability, and immutable event audit logging.
+CareGrid is an explainable clinical prioritization and ICU queue management system designed to support transparent, data-driven patient prioritization.
 
----
+The system combines clinical severity, prognostic information, and operational waiting time into a structured priority framework while maintaining a dynamic patient queue and providing transparent reasoning behind ranking decisions.
 
-## 1. Data Sources & Provenance Policy
-
-CareGrid V2 strictly uses the two hackathon datasets:
-- `data/raw/X_train_2025.csv` (3,600+ clinical ICU records with 120+ physiological parameters)
-- `data/raw/patients.csv` (1,000 hospital patient demographic records)
-
-### Data Provenance Taxonomy
-| Provenance Tag | Description | Example Fields |
-| :--- | :--- | :--- |
-| `SOURCE_VALUE` | Direct un-modified value from verified raw CSV datasets | `SOFA`, `SAPS-I`, `GCS_first`, `arrival_date`, `HR_first` |
-| `DERIVED_VALUE` | Mathematically transformed/calculated value | `patient_id` (`P-{recordid}`), `severity` (SOFA derived 0-100) |
-| `SIMULATED_VALUE` | Synthetic V2 prototype demonstration value | `survival_likelihood`, `waiting_time_minutes`, `patient_status` |
+CareGrid V6 extends the original priority engine with a six-system clinical severity decomposition, enabling the system to identify the clinical factors contributing to a patient's overall severity rather than treating severity as a single opaque value.
 
 ---
 
-## 2. Priority Engine & Normalization Methodology
+## V6 Clinical Priority Architecture
 
-Severity is normalized from the raw SOFA organ failure score:
-
-$$\text{severity} = \text{clamp}\left(\frac{\text{SOFA}}{20.0} \times 100.0, 0, 100\right)$$
-
-The Priority Engine aggregates three 0–100 factors using configurable normalized weights:
-
-$$\text{Priority Score} = (\text{Severity} \times W_{\text{sev}}) + (\text{Survival Likelihood} \times W_{\text{surv}}) + (\text{Normalized Wait} \times W_{\text{wait}})$$
-
-### Default Weights
-- $W_{\text{sev}} = 0.50$ (Severity weight)
-- $W_{\text{surv}} = 0.30$ (Survival likelihood weight)
-- $W_{\text{wait}} = 0.20$ (Waiting duration weight)
-
----
-
-## 3. Deterministic 4-Tier Tie-Breaking Policy
-
-When two candidate patients have near-identical priority scores ($|\text{Score}_A - \text{Score}_B| \le 0.50$), CareGrid resolves the tie using a strict deterministic hierarchy:
-
-1. **Tier 1**: Higher Severity Contribution (`severity_contribution`)
-2. **Tier 2**: Longer Waiting Duration (`waiting_time_minutes`)
-3. **Tier 3**: Higher Survival Likelihood (`survival_likelihood`)
-4. **Tier 4**: Lexicographical Patient ID (`P-{recordid}`)
-
----
-
-## 4. Documentation Index (`docs/`)
-
-The repository contains 10 detailed research, architectural, and presentation documents:
-
-- 📄 [`docs/problem_statement.md`](file:///Users/jyotish/.gemini/antigravity-ide/scratch/caregrid/docs/problem_statement.md) — Problem definition, operational objectives, and clinician-in-the-loop principle.
-- 📄 [`docs/literature_review.md`](file:///Users/jyotish/.gemini/antigravity-ide/scratch/caregrid/docs/literature_review.md) — Comprehensive survey of SOFA, SAPS, NEWS2, and MCDA literature with genuine citations.
-- 📄 [`docs/research_gap.md`](file:///Users/jyotish/.gemini/antigravity-ide/scratch/caregrid/docs/research_gap.md) — CareGrid's core research gap and proposed contributions.
-- 📄 [`docs/methodology.md`](file:///Users/jyotish/.gemini/antigravity-ide/scratch/caregrid/docs/methodology.md) — 16-stage Input-Process-Output methodology.
-- 📄 [`docs/system_architecture.md`](file:///Users/jyotish/.gemini/antigravity-ide/scratch/caregrid/docs/system_architecture.md) — Component architecture and data/event flow diagrams.
-- 📄 [`docs/design_decisions.md`](file:///Users/jyotish/.gemini/antigravity-ide/scratch/caregrid/docs/design_decisions.md) — Engineering justifications for design choices.
-- 📄 [`docs/demo_script.md`](file:///Users/jyotish/.gemini/antigravity-ide/scratch/caregrid/docs/demo_script.md) — 3 to 5 minute live hackathon demonstration script.
-- 📄 [`docs/judge_questions.md`](file:///Users/jyotish/.gemini/antigravity-ide/scratch/caregrid/docs/judge_questions.md) — 10 comprehensive Q&A responses for competition judges.
-- 📄 [`docs/rubric_traceability.md`](file:///Users/jyotish/.gemini/antigravity-ide/scratch/caregrid/docs/rubric_traceability.md) — Explicit mapping of competition criteria (15 marks) to project evidence.
-- 📄 [`docs/validation_report.md`](file:///Users/jyotish/.gemini/antigravity-ide/scratch/caregrid/docs/validation_report.md) — Real dataset sanity report and test execution results.
-
----
-
-## 5. Running & Testing CareGrid V2
-
-### Run Unit Test Suite (20 Tests)
-```bash
-python3 -m unittest discover -s tests
+```text
+                         CAREGRID
+                            |
+              +-------------+-------------+
+              |                           |
+              v                           v
+      CLINICAL FACTORS             OPERATIONAL FACTOR
+              |                           |
+              v                           v
+          SEVERITY                  WAITING TIME
+              |
+       +------+------+------+------+------+
+       |      |      |      |      |      |
+       v      v      v      v      v      v
+     Neuro  Cardio  Resp   Coag   Liver  Kidney
+              |
+              v
+       OVERALL SEVERITY
+              |
+              +
+       LONG-TERM PROGNOSIS
+              |
+              v
+     SURVIVAL / PROGNOSTIC
+          COMPONENT
+              |
+              +
+         WAITING TIME
+              |
+              v
+      CAREGRID PRIORITY
+            SCORE
+              |
+              v
+           RANKING
 ```
 
-### Start Web Server
-```bash
-python3 -m src.server
-```
-Open `http://localhost:8080` in your web browser.
+The central V6 innovation is the decomposition of clinical severity into six organ-system factors:
+
+* Neurological
+* Cardiovascular
+* Respiratory
+* Coagulation
+* Liver
+* Kidney
+
+These factors contribute to an overall clinical severity representation, which is then integrated with the prognostic and operational components of the existing CareGrid prioritization framework.
 
 ---
 
-## 6. Clinical Disclaimer
+## Key Features
 
-> [!IMPORTANT]
-> **CareGrid V2 is a decision-support research prototype.**
-> - CareGrid does **NOT** autonomously make binding medical allocations or prescribe treatment.
-> - Final clinical ICU allocation authority remains strictly with authorized healthcare professionals.
+### Dynamic Patient Prioritization
+
+CareGrid continuously calculates patient priority using the existing deterministic priority engine.
+
+The ranking is not statically assigned. Changes in patient state can result in recalculation of priority and queue position.
+
+### Clinical Severity Decomposition
+
+V6 expands clinical severity into six organ-system dimensions:
+
+| Organ System   | Clinical Dimension                |
+| -------------- | --------------------------------- |
+| Neurological   | Neurological function             |
+| Cardiovascular | Hemodynamic/cardiovascular status |
+| Respiratory    | Respiratory function              |
+| Coagulation    | Platelet/coagulation status       |
+| Liver          | Hepatic function                  |
+| Kidney         | Renal function                    |
+
+Each system can be examined independently before contributing to the overall severity representation.
+
+### Overall Severity
+
+The six clinical dimensions are consolidated into an overall severity representation.
+
+CareGrid can therefore provide both:
+
+* Overall clinical severity
+* Individual organ-system contributors
+
+This makes the severity component more transparent and interpretable.
+
+### Prognostic Component
+
+CareGrid separates immediate clinical severity from the prognostic component.
+
+The architecture explicitly distinguishes:
+
+```text
+Clinical Severity
+        +
+Long-Term Prognosis
+        |
+        v
+Survival / Prognostic Component
+```
+
+This allows the priority framework to incorporate both current clinical condition and the existing prognostic component.
+
+### Waiting-Time Equity
+
+Waiting time remains a separate operational factor.
+
+This prevents the operational dimension of queue management from being hidden inside clinical severity.
+
+### Priority Score
+
+The clinical and operational components are combined through the CareGrid priority engine to produce a normalized priority score.
+
+The priority score determines the patient's position in the active queue.
+
+### Dynamic Queue Management
+
+The queue responds to changes in patient state.
+
+For example:
+
+```text
+Patient State Change
+        |
+        v
+Clinical Severity
+        |
+        v
+Priority Score
+        |
+        v
+Queue Recalculation
+        |
+        v
+Updated Ranking
+```
+
+When a patient is discharged, the patient leaves the active queue and the remaining patients are re-ranked.
+
+### Explainable Ranking
+
+CareGrid provides structured explanations for ranking decisions.
+
+The system can break down:
+
+* Overall severity
+* Organ-system contributors
+* Prognostic component
+* Waiting-time contribution
+* Final priority score
+* Ranking position
+
+This enables users to understand why a patient occupies a particular position rather than relying on an unexplained ranking.
+
+### Dynamic Attention Engine
+
+The Attention Engine identifies operational and clinical situations requiring attention based on the current system state.
+
+Potential signals include:
+
+* Critical severity
+* Multi-organ involvement
+* Extended waiting time
+* Near-tie priority scores
+* Significant ranking changes
+* ICU capacity pressure
+
+Attention signals are derived from current CareGrid data rather than fixed patient-specific messages.
+
+### What-If Clinical Simulation
+
+CareGrid supports isolated what-if scenarios for exploring potential changes in clinical severity.
+
+For example:
+
+```text
+Current State
+    |
+    v
+Respiratory Severity = 40
+    |
+    v
+What-If Scenario
+    |
+    v
+Respiratory Severity = 85
+    |
+    v
+Recalculate Severity
+    |
+    v
+Recalculate Priority
+    |
+    v
+Compare Ranking
+```
+
+Simulation operates independently from the live queue and does not modify production patient state.
+
+### Honest Missing-Data Representation
+
+CareGrid does not fabricate unavailable clinical information.
+
+When the required clinical data for an organ system is unavailable, the system represents it explicitly as:
+
+```text
+DATA UNAVAILABLE
+```
+
+This is kept distinct from a normal clinical result.
+
+---
+
+## System Architecture
+
+```text
+Patient Dataset
+      |
+      v
+Data Loader
+      |
+      v
+Clinical Severity Engine
+      |
+      +---- Neurological
+      +---- Cardiovascular
+      +---- Respiratory
+      +---- Coagulation
+      +---- Liver
+      +---- Kidney
+      |
+      v
+Overall Severity
+      |
+      +---- Prognostic Component
+      |
+      +---- Waiting Time
+      |
+      v
+Priority Engine
+      |
+      v
+Ranking Engine
+      |
+      +---- Command Center
+      +---- Patient Profile
+      +---- Attention Engine
+      +---- Analytics
+      +---- What-If Simulation
+      +---- Audit / Explainability
+```
+
+---
+
+## Technology Stack
+
+### Backend
+
+* Python
+* HTTP REST API
+* Modular deterministic clinical and priority engines
+
+### Frontend
+
+* HTML
+* CSS
+* JavaScript
+* Interactive dashboard components
+* Data-driven visualizations
+
+### Core System Components
+
+* Patient/Data Loader
+* Clinical Severity Engine
+* Priority Engine
+* Ranking Engine
+* Attention Engine
+* Simulation Engine
+* Audit Logger
+* CareGrid Intelligence / Explainability Layer
+
+### Testing
+
+* Python `unittest`
+* Unit and integration testing
+* API endpoint validation
+* Simulation isolation testing
+
+---
+
+## Design Principles
+
+### Deterministic First
+
+The CareGrid priority engine remains the authoritative source for patient ranking.
+
+The system does not rely on generative AI to determine priority.
+
+### Explainability
+
+Every major prioritization decision should be traceable to its underlying components.
+
+### Data Integrity
+
+CareGrid uses the available patient data and does not invent unavailable clinical measurements.
+
+### Dynamic State
+
+Patient rankings, dashboard metrics, attention signals, and queue composition are derived from the current system state.
+
+### Separation of Concerns
+
+CareGrid separates:
+
+```text
+Clinical Factors
+       |
+       v
+Severity
+
+Prognostic Factors
+       |
+       v
+Survival / Prognostic Component
+
+Operational Factors
+       |
+       v
+Waiting Time
+```
+
+These components are then brought together by the priority engine.
+
+### Simulation Safety
+
+What-if scenarios operate in an isolated state and cannot modify the live patient queue.
+
+---
+
+## V5 to V6 Evolution
+
+### CareGrid V5
+
+```text
+Severity
+   +
+Survival / Prognosis
+   +
+Waiting Time
+   |
+   v
+Priority Score
+   |
+   v
+Ranking
+```
+
+### CareGrid V6
+
+```text
+Clinical Factors
+   |
+   +-- Neurological
+   +-- Cardiovascular
+   +-- Respiratory
+   +-- Coagulation
+   +-- Liver
+   +-- Kidney
+   |
+   v
+Overall Severity
+   +
+Long-Term Prognosis
+   |
+   v
+Survival / Prognostic Component
+   +
+Waiting Time
+   |
+   v
+CareGrid Priority Score
+   |
+   v
+Ranking
+```
+
+V6 therefore moves CareGrid from a primarily aggregate severity model toward a more granular clinical-factor architecture while preserving the existing prioritization foundation.
+
+---
+
+## Project Objective
+
+CareGrid aims to make ICU prioritization more:
+
+* Transparent
+* Explainable
+* Dynamic
+* Data-driven
+* Clinically structured
+* Operationally aware
+
+The goal is not to replace clinical professionals or make autonomous treatment decisions. CareGrid is designed as a decision-support and prioritization system whose calculations and assumptions can be inspected and understood.
+
+---
+
+## Current Innovation
+
+The core V6 innovation is **Clinical Factor Decomposition**.
+
+Instead of treating severity as a single value:
+
+```text
+Severity
+```
+
+CareGrid exposes the underlying clinical structure:
+
+```text
+Neurological
+Cardiovascular
+Respiratory
+Coagulation
+Liver
+Kidney
+        |
+        v
+Overall Severity
+```
+
+This clinical layer is then connected to prognosis and operational waiting time to produce the final CareGrid Priority Score and ranking.
+
+---
+
+## Project Status
+
+**CareGrid V6 — Clinical Severity Intelligence**
+
+The V6 architecture builds upon the working V5 prioritization system and introduces organ-system clinical decomposition, dynamic clinical reasoning, explainable ranking, and isolated what-if analysis.
+
+> CareGrid is a research and decision-support prototype. Its scoring framework should not be interpreted as a clinically validated protocol or used as a substitute for qualified medical judgment.
