@@ -17,7 +17,7 @@
                 <div class="brand-icon-box">❖</div>
                 <div class="brand-name">
                     CareGrid
-                    <span>ICU Arbitration V3.4</span>
+                    <span>ICU Arbitration <strong style="color: #0284c7;">[ V6.0 ]</strong></span>
                 </div>
             </div>
 
@@ -56,7 +56,7 @@
             <div class="sidebar-promo-card">
                 <div class="promo-title">Decision Support Engine</div>
                 <p class="promo-sub">SOFA organ failure severity, survival potential, waiting equity.</p>
-                <div class="promo-btn">V3.4 ENGINE ACTIVE</div>
+                <div class="promo-btn">V6 CLINICAL INTELLIGENCE ACTIVE</div>
             </div>
         </aside>
 
@@ -67,7 +67,7 @@
                 <div class="topbar-header">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <h1 class="topbar-title" id="page-current-title">Command Center</h1>
-                        <span class="version-badge">V3.4</span>
+                        <span class="version-badge">V6.0</span>
                     </div>
                     <p class="topbar-sub">ICU prioritization & capacity arbitration</p>
                 </div>
@@ -86,50 +86,37 @@
                 <div class="summary-metrics-grid">
                     <!-- Metric 1: Total Patients -->
                     <div class="kpi-card">
-                        <div class="kpi-icon-box" style="background: #e0f2fe; color: #0284c7;">
-                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                        </div>
-                        <div class="kpi-body">
-                            <span class="kpi-title">Total Patients</span>
-                            <div class="kpi-value" id="kpi-total-patients">3,600</div>
-                            <span class="kpi-sub">Active cohort population</span>
-                        </div>
+                        <span class="kpi-title">PATIENTS</span>
+                        <div class="kpi-value" id="kpi-total-patients">3,600</div>
+                        <span class="kpi-sub">ACTIVE COHORT</span>
                     </div>
 
                     <!-- Metric 2: Critical Patients -->
                     <div class="kpi-card">
-                        <div class="kpi-icon-box" style="background: #fee2e2; color: #dc2626;">
-                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                        </div>
-                        <div class="kpi-body">
-                            <span class="kpi-title">Critical Severity</span>
-                            <div class="kpi-value" style="color: var(--status-critical);" id="kpi-critical-patients">174</div>
-                            <span class="kpi-sub">SOFA derived ≥ 70.0</span>
-                        </div>
+                        <span class="kpi-title">CRITICAL</span>
+                        <div class="kpi-value" style="color: var(--status-critical);" id="kpi-critical-patients">174</div>
+                        <span class="kpi-sub">SOFA ≥ 70.0</span>
                     </div>
 
                     <!-- Metric 3: Waiting Patients -->
                     <div class="kpi-card">
-                        <div class="kpi-icon-box" style="background: #fef3c7; color: #d97706;">
-                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 16 14"></polyline></svg>
-                        </div>
-                        <div class="kpi-body">
-                            <span class="kpi-title">Waiting For ICU</span>
-                            <div class="kpi-value" style="color: var(--status-warning);" id="kpi-waiting-patients">42</div>
-                            <span class="kpi-sub">Pending bed arbitration</span>
-                        </div>
+                        <span class="kpi-title">WAITING</span>
+                        <div class="kpi-value" style="color: var(--status-warning);" id="kpi-waiting-patients">2,133</div>
+                        <span class="kpi-sub">PENDING BEDS</span>
                     </div>
 
                     <!-- Metric 4: ICU Capacity Status -->
                     <div class="kpi-card">
-                        <div class="kpi-icon-box" style="background: #d1fae5; color: #059669;">
-                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"></path></svg>
-                        </div>
-                        <div class="kpi-body">
-                            <span class="kpi-title">ICU Occupancy</span>
-                            <div class="kpi-value" style="color: #0f172a;" id="kpi-bed-occupancy">42/50</div>
-                            <span class="kpi-sub" style="color: var(--status-success);" id="kpi-available-beds">8 Beds Available</span>
-                        </div>
+                        <span class="kpi-title">ICU BEDS</span>
+                        <div class="kpi-value" style="color: #0f172a;" id="kpi-bed-occupancy">42/50</div>
+                        <span class="kpi-sub" style="color: #16a34a; font-weight: 700;" id="kpi-available-beds">8 Beds Available</span>
+                    </div>
+
+                    <!-- Metric 5: Top Candidate -->
+                    <div class="kpi-card kpi-dark">
+                        <span class="kpi-title">TOP CANDIDATE</span>
+                        <div class="kpi-value" id="kpi-top-score">87.9</div>
+                        <span class="kpi-sub" id="kpi-top-id">#01 · P-139169</span>
                     </div>
                 </div>
 
