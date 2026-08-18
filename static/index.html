@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareGrid V2 — ICU Bed Arbitration & Priority Engine</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Persistent Left Sidebar (Matching Reference) -->
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-icon-box">❖</div>
+                <div class="brand-name">
+                    CareGrid
+                    <span>ICU Arbitration V3.4</span>
+                </div>
+            </div>
+
+            <!-- Navigation Sections -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">General</div>
+                <nav class="sidebar-nav">
+                    <button class="nav-item active" data-tab="command-center">
+                        Command Center
+                    </button>
+                    <button class="nav-item" data-tab="simulation">
+                        Simulation Mode
+                    </button>
+                    <button class="nav-item" data-tab="intelligence">
+                        CareGrid Intelligence
+                    </button>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Tools & Specs</div>
+                <nav class="sidebar-nav">
+                    <button class="nav-item" data-tab="audit">
+                        Audit Log
+                    </button>
+                    <button class="nav-item" data-tab="methodology">
+                        Methodology
+                    </button>
+                    <button class="nav-item" data-tab="research">
+                        Research
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Bottom Safeguard Card -->
+            <div class="sidebar-promo-card">
+                <div class="promo-title">Decision Support Engine</div>
+                <p class="promo-sub">SOFA organ failure severity, survival potential, waiting equity.</p>
+                <div class="promo-btn">V3.4 ENGINE ACTIVE</div>
+            </div>
+        </aside>
+
+        <!-- Main Dashboard Workspace -->
+        <main class="app-main-content">
+            <!-- Top Bar Header -->
+            <header class="app-topbar">
+                <div class="topbar-header">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <h1 class="topbar-title" id="page-current-title">Command Center</h1>
+                        <span class="version-badge">V3.4</span>
+                    </div>
+                    <p class="topbar-sub">ICU prioritization & capacity arbitration</p>
+                </div>
+
+
+                <div class="topbar-actions">
+                    <div class="search-input-wrapper">
+                        <input type="text" id="patient-search-input" class="search-input" placeholder="Search patient ID (e.g. P-139169)...">
+                    </div>
+                </div>
+            </header>
+
+            <!-- TAB 1: COMMAND CENTER -->
+            <div class="tab-pane active" id="pane-command-center">
+                <!-- TOP SUMMARY METRICS ROW (Inspired by Reference Image KPI Cards) -->
+                <div class="summary-metrics-grid">
+                    <!-- Metric 1: Total Patients -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box" style="background: #e0f2fe; color: #0284c7;">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                        </div>
+                        <div class="kpi-body">
+                            <span class="kpi-title">Total Patients</span>
+                            <div class="kpi-value" id="kpi-total-patients">3,600</div>
+                            <span class="kpi-sub">Active cohort population</span>
+                        </div>
+                    </div>
+
+                    <!-- Metric 2: Critical Patients -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box" style="background: #fee2e2; color: #dc2626;">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        </div>
+                        <div class="kpi-body">
+                            <span class="kpi-title">Critical Severity</span>
+                            <div class="kpi-value" style="color: var(--status-critical);" id="kpi-critical-patients">174</div>
+                            <span class="kpi-sub">SOFA derived ≥ 70.0</span>
+                        </div>
+                    </div>
+
+                    <!-- Metric 3: Waiting Patients -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box" style="background: #fef3c7; color: #d97706;">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 16 14"></polyline></svg>
+                        </div>
+                        <div class="kpi-body">
+                            <span class="kpi-title">Waiting For ICU</span>
+                            <div class="kpi-value" style="color: var(--status-warning);" id="kpi-waiting-patients">42</div>
+                            <span class="kpi-sub">Pending bed arbitration</span>
+                        </div>
+                    </div>
+
+                    <!-- Metric 4: ICU Capacity Status -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box" style="background: #d1fae5; color: #059669;">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"></path></svg>
+                        </div>
+                        <div class="kpi-body">
+                            <span class="kpi-title">ICU Occupancy</span>
+                            <div class="kpi-value" style="color: #0f172a;" id="kpi-bed-occupancy">42/50</div>
+                            <span class="kpi-sub" style="color: var(--status-success);" id="kpi-available-beds">8 Beds Available</span>
+                        </div>
+                    </div>
+                </div>
+
+                                <!-- V4.0 / V5.0 ATTENTION REQUIRED PANEL -->
+                <div id="attention-required-section" style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="sidebar-title" style="padding-left: 0; font-size: 11px; letter-spacing: 0.8px;">ATTENTION REQUIRED</span>
+                            <span style="font-size: 10px; color: var(--text-muted); font-weight: 600;">(DETERMINISTIC OPERATIONAL SIGNALS)</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button id="btn-toggle-attn-config" class="btn-ops" style="font-size: 10px; padding: 3px 8px; background: #334155;">CONFIGURE THRESHOLDS</button>
+                            <span id="attention-signals-count-badge" class="status-badge warning" style="font-size: 10px;">0 ACTIVE SIGNALS</span>
+                        </div>
+                    </div>
+
+                    <!-- V5.0 ATTENTION THRESHOLD CONFIGURATION PANEL -->
+                    <div id="attention-config-panel" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px;">
+                            <div>
+                                <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #475569;">ATTENTION THRESHOLD CONFIGURATION</span>
+                                <span style="font-size: 10px; color: #64748b; margin-left: 6px;">(OPERATIONAL POLICY PARAMETERS)</span>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button id="btn-apply-attn-config" class="btn-ops" style="padding: 4px 12px; font-size: 10px; background: #0f172a;">APPLY</button>
+                                <button id="btn-reset-attn-config" class="btn-ops" style="padding: 4px 12px; font-size: 10px; background: #64748b;">RESET DEFAULTS</button>
+                            </div>
+                        </div>
+
+                        <!-- Threshold Inputs Grid -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; font-size: 11px;">
+                            <div>
+                                <label style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 3px;">NEAR-TIE GAP (PTS)</label>
+                                <input type="number" step="0.1" min="0" id="cfg-near-tie" value="1.0" style="width: 100%; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 11.5px; font-family: var(--font-mono); outline: none;">
+                            </div>
+                            <div>
+                                <label style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 3px;">CRITICAL SEVERITY (0-100)</label>
+                                <input type="number" step="1" min="0" max="100" id="cfg-crit-sev" value="70.0" style="width: 100%; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 11.5px; font-family: var(--font-mono); outline: none;">
+                            </div>
+                            <div>
+                                <label style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 3px;">CRITICAL QUEUE LOAD (COUNT)</label>
+                                <input type="number" step="1" min="1" id="cfg-crit-load" value="5" style="width: 100%; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 11.5px; font-family: var(--font-mono); outline: none;">
+                            </div>
+                            <div>
+                                <label style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 3px;">WAITING TIME (MIN)</label>
+                                <input type="number" step="5" min="0" id="cfg-wait-time" value="120" style="width: 100%; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 11.5px; font-family: var(--font-mono); outline: none;">
+                            </div>
+                            <div>
+                                <label style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 3px;">MAJOR RANK CHANGE (POS)</label>
+                                <input type="number" step="1" min="1" id="cfg-rank-change" value="2" style="width: 100%; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 11.5px; font-family: var(--font-mono); outline: none;">
+                            </div>
+                        </div>
+
+                        <!-- Validation Message -->
+                        <div id="attention-config-msg" style="display: none; margin-top: 8px; font-size: 11px; font-weight: 600; padding: 6px 10px; border-radius: 6px;"></div>
+                    </div>
+
+                    <div id="attention-cards-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
+                        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 12px 16px; text-align: center; color: var(--text-muted); font-size: 12px;">
+                            Evaluating live CareGrid operational attention signals...
+                        </div>
+                    </div>
+                </div>
+
+<div class="dashboard-grid-2col">
+                    <!-- LEFT COLUMN: LIVE PRIORITY QUEUE TABLE -->
+                    <section class="ui-card" style="grid-column: 1 / 2;">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h2>Patient Prioritization</h2>
+                                <p class="card-subtitle" id="queue-status-text">Top 50 Patient Records · Dynamic Reranking Engine</p>
+                            </div>
+                            <div class="card-filter-pills">
+                                <button class="filter-pill active" id="filter-all">All</button>
+                                <button class="filter-pill" id="filter-critical">Critical</button>
+                                <button class="filter-pill" id="filter-waiting">Waiting</button>
+                            </div>
+                        </div>
+
+                        <div class="table-wrapper">
+                            <table class="ops-table">
+                                <thead>
+                                    <tr>
+                                        <th>RANK</th>
+                                        <th>PATIENT ID</th>
+                                        <th>STATUS</th>
+                                        <th>PRIORITY SCORE</th>
+                                        <th>SEVERITY</th>
+                                        <th>SURVIVAL</th>
+                                        <th>WAIT TIME</th>
+                                        <th>ACTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ops-queue-body">
+                                    <tr>
+                                        <td colspan="8" style="text-align: center; padding: 24px; color: var(--text-muted);">Loading CareGrid priority engine...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <!-- RIGHT COLUMN: 1. ICU OCCUPANCY TOP -> 2. SELECTED PATIENT DETAIL PANEL -> 3. DECISION AUDIT -->
+                    <div style="grid-column: 2 / 3; display: flex; flex-direction: column; gap: 20px;">
+
+
+                        <!-- 2. RIGHT SECOND CARD: SELECTED PATIENT DETAIL PANEL (Matching Reference Selected Patient) -->
+                        <section class="ui-card">
+                            <div class="card-header" style="margin-bottom: 8px;">
+                                <div class="card-title-group">
+                                    <h3>Selected Patient</h3>
+                                    <p class="card-subtitle" id="panel-patient-id">PATIENT P-139169</p>
+                                </div>
+                                <span class="status-badge admitted" id="panel-status-badge">● ADMITTED</span>
+                            </div>
+
+                            <!-- Panel Sub-Tabs -->
+                            <div class="panel-tabs-row">
+                                <button class="panel-tab-btn active" id="ptab-overview" data-ptab="overview">Overview</button>
+                                <button class="panel-tab-btn" id="ptab-breakdown" data-ptab="breakdown">Breakdown</button>
+                                <button class="panel-tab-btn" id="ptab-explanation" data-ptab="explanation">Why #1?</button>
+                            </div>
+
+                            <!-- PANE 1: OVERVIEW -->
+                            <div class="ptab-pane active" id="pview-overview">
+                                <div class="selected-patient-hero">
+                                    <div>
+                                        <span class="rank-badge rank-1" id="panel-rank-badge">RANK #1</span>
+                                        <div style="font-size: 11px; font-weight:600; color: var(--text-secondary); margin-top: 4px;" id="panel-rank-movement">-- Stable</div>
+                                    </div>
+                                    <div class="hero-score-box">
+                                        <div class="hero-score-val" id="panel-score">87.9</div>
+                                        <div class="hero-score-lbl">PRIORITY SCORE</div>
+                                    </div>
+                                </div>
+
+                                <div class="metrics-bars-group">
+                                    <div class="metric-bar-item">
+                                        <div class="bar-header">
+                                            <span class="bar-title">Severity (SOFA Derived)</span>
+                                            <span class="bar-val" id="panel-sev-val">100.0</span>
+                                        </div>
+                                        <div class="bar-track"><div class="bar-fill" id="bar-fill-sev" style="width: 100%;"></div></div>
+                                    </div>
+
+                                    <div class="metric-bar-item">
+                                        <div class="bar-header">
+                                            <span class="bar-title">Survival Likelihood</span>
+                                            <span class="bar-val" id="panel-surv-val">68.5%</span>
+                                        </div>
+                                        <div class="bar-track"><div class="bar-fill" id="bar-fill-surv" style="width: 68.5%;"></div></div>
+                                    </div>
+
+                                    <div class="metric-bar-item">
+                                        <div class="bar-header">
+                                            <span class="bar-title">Waiting Duration</span>
+                                            <span class="bar-val" id="panel-wait-val">104 min</span>
+                                        </div>
+                                        <div class="bar-track"><div class="bar-fill" id="bar-fill-wait" style="width: 86.6%;"></div></div>
+                                    </div>
+                                </div>
+
+                                <!-- Chart 2: Priority Component Breakdown Visualization -->
+                            <div style="margin-bottom: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px;">
+                                <span class="sidebar-title" style="padding-left: 0; font-size: 10px; letter-spacing: 0.8px; display: block; margin-bottom: 6px;">SCORE CONTRIBUTION BREAKDOWN</span>
+                                <div id="chart-patient-breakdown" style="width: 100%;">
+                                    <!-- Horizontal Bar Chart -->
+                                </div>
+                            </div>
+
+                            <div class="explain-card" id="panel-explain-card" style="margin-bottom: 14px;">
+                                    <span class="explain-eyebrow">RANK EXPLANATION</span>
+                                    <p class="explain-text" id="panel-explain-text">High SOFA-derived severity is the primary contributor.</p>
+                                </div>
+
+                                <button id="btn-open-full-profile" class="btn-ops" style="width: 100%; padding: 10px; background: #0f172a; text-align: center; margin-bottom: 10px;">VIEW FULL PROFILE</button>
+
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
+                                    <button id="btn-compare-above" class="v31-action-btn" style="text-align: center; padding: 7px 4px; font-size: 9.5px;">COMPARE WITH ABOVE</button>
+                                    <button id="btn-compare-below" class="v31-action-btn" style="text-align: center; padding: 7px 4px; font-size: 9.5px;">COMPARE WITH BELOW</button>
+                                </div>
+                                <button id="btn-run-whatif" class="v31-action-btn" style="width: 100%; text-align: center; background: #f8fafc; border-color: #cbd5e1; color: #0f172a; margin-bottom: 6px; padding: 7px;">RUN WHAT-IF SCENARIO</button>
+                            </div>
+
+                            <!-- PANE 2: BREAKDOWN -->
+                            <div class="ptab-pane" id="pview-breakdown" style="display: none;">
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 14px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                                        <span style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;">PRIORITY SCORE BREAKDOWN</span>
+                                        <span style="font-family: var(--font-mono); font-size: 13px; font-weight: 800; color: #0f172a;" id="pbreak-total-score">87.9 / 100.0</span>
+                                    </div>
+                                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <div>
+                                                <div style="font-size: 12px; font-weight: 600; color: #0f172a;">Severity (SOFA Derived)</div>
+                                                <div style="font-size: 10px; color: #64748b;" id="pbreak-sev-raw">Raw: 100.0 · Weight: 50%</div>
+                                            </div>
+                                            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--status-critical);" id="pbreak-sev-contrib">+50.0 pts</span>
+                                        </div>
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <div>
+                                                <div style="font-size: 12px; font-weight: 600; color: #0f172a;">Survival Likelihood</div>
+                                                <div style="font-size: 10px; color: #64748b;" id="pbreak-surv-raw">Raw: 68.5% · Weight: 30%</div>
+                                            </div>
+                                            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--status-warning);" id="pbreak-surv-contrib">+20.6 pts</span>
+                                        </div>
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <div>
+                                                <div style="font-size: 12px; font-weight: 600; color: #0f172a;">Waiting Duration Equity</div>
+                                                <div style="font-size: 10px; color: #64748b;" id="pbreak-wait-raw">Raw: 104 min · Weight: 20%</div>
+                                            </div>
+                                            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #3b82f6;" id="pbreak-wait-contrib">+17.3 pts</span>
+                                        </div>
+                                    </div>
+                                    <div style="border-top: 1px solid #e2e8f0; margin-top: 10px; padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase;">DOMINANT FACTOR</span>
+                                        <span style="font-size: 11px; font-weight: 700; color: #0f172a;" id="pbreak-dominant">Severity</span>
+                                    </div>
+                                </div>
+                                <div style="font-size: 10px; color: #64748b; line-height: 1.5; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+                                    <strong>Formula:</strong> Score = (Severity × W_sev) + (Survival × W_surv) + (Wait × W_wait)<br>
+                                    Values calculated deterministically by CareGrid Priority Engine.
+                                </div>
+                            </div>
+
+                            <!-- PANE 3: WHY #RANK -->
+                            <div class="ptab-pane" id="pview-explanation" style="display: none;">
+                                <div style="margin-bottom: 10px;">
+                                    <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);">CAREGRID INTELLIGENCE — V3.1</span>
+                                    <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;" id="panel-why-title">WHY IS THIS PATIENT RANKED #1?</h4>
+                                </div>
+
+                                <!-- Quick Mode Buttons -->
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px;">
+                                    <button class="v31-action-btn" id="pwhy-mode-ranked" data-mode="why_ranked">WHY RANKED HERE?</button>
+                                    <button class="v31-action-btn" id="pwhy-mode-drivers" data-mode="drivers">DRIVERS</button>
+                                    <button class="v31-action-btn" id="pwhy-mode-simple" data-mode="simple">EXPLAIN SIMPLY</button>
+                                    <button class="v31-action-btn" id="pwhy-mode-why1" data-mode="why_not_1">WHY NOT #1?</button>
+                                </div>
+
+                                <div id="panel-why-ai-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+                                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                                        <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); display: inline-block;"></span>
+                                        <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--accent-green);">AI RESPONSE</span>
+                                    </div>
+                                    <div id="panel-why-ai-text" style="font-size: 11px; line-height: 1.6; color: #1e293b; white-space: pre-wrap; font-family: var(--font-mono);">
+                                        Select this tab to query CareGrid Intelligence for dynamic rank explanation.
+                                    </div>
+                                    <div style="border-top: 1px solid #e2e8f0; margin-top: 10px; padding-top: 6px; display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">SOURCE</span>
+                                        <span style="font-size: 9px; font-family: var(--font-mono); color: #475569;" id="panel-why-ai-source">CareGrid Current Patient State | CareGrid Priority Engine</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- 3. RIGHT BOTTOM CARD: RECENT DECISION AUDIT EVENTS -->
+                        <section class="ui-card">
+                            <div class="card-header">
+                                <div class="card-title-group">
+                                    <h3>Decision Audit</h3>
+                                    <p class="card-subtitle">Recent arbitration events</p>
+                                </div>
+                            </div>
+
+                            <div id="side-audit-events" style="display: flex; flex-direction: column; gap: 8px;">
+                                <div style="font-size: 12px; color: var(--text-secondary);">Loading decision log...</div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: CAREGRID INTELLIGENCE (V3.0 FOUNDATION) -->
+            <div class="tab-pane" id="pane-intelligence">
+                <div class="ui-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h2>CareGrid Intelligence</h2>
+                            <p class="card-subtitle">Ask about the current ICU priority state.</p>
+                        </div>
+                    </div>
+
+                    <!-- SUGGESTED QUESTIONS -->
+                    <div style="margin-bottom: 20px;">
+                        <span class="sidebar-title" style="padding-left: 0;">SUGGESTED QUESTIONS</span>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
+                            <button class="filter-pill intel-btn" id="btn-q1" data-q="Why is the top-ranked patient #1?">Why is the top-ranked patient #1?</button>
+                            <button class="filter-pill intel-btn" id="btn-q2" data-q="Summarize the current queue.">Summarize the current queue.</button>
+                            <button class="filter-pill intel-btn" id="btn-q3" data-q="What is the current priority state?">What is the current priority state?</button>
+                            <button class="filter-pill intel-btn" id="btn-q4" data-q="What changed recently?">What changed recently?</button>
+                            <button class="filter-pill intel-btn" id="btn-q5" data-q="Why did this patient move?">Why did this patient move?</button>
+                            <button class="filter-pill intel-btn" id="btn-q6" data-q="Why is this flagged?">Why is this flagged?</button>
+                        </div>
+                    </div>
+
+                    <!-- ASK CAREGRID INPUT -->
+                    <div style="margin-bottom: 24px;">
+                        <span class="sidebar-title" style="padding-left: 0;">ASK CAREGRID</span>
+                        <div style="display: flex; gap: 10px; margin-top: 8px;">
+                            <input type="text" id="intel-query-input" class="search-input" style="flex: 1; min-width: 0; background: #ffffff; border: 1px solid #cbd5e1;" placeholder="Type your question here...">
+                            <button id="btn-intel-ask" class="btn-ops" style="padding: 10px 24px; font-size: 12px; background: #0f172a;">ASK</button>
+                        </div>
+                    </div>
+
+                    <!-- RESPONSE CONTAINER -->
+                    <div style="display: grid; grid-template-columns: 1fr 300px; gap: 20px;">
+                        <div id="intel-response-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">RESPONSE</span>
+                                <span class="status-badge admitted" style="font-size: 10px;" id="intel-source-tag">SOURCE: CareGrid Current Priority State</span>
+                            </div>
+                            <div id="intel-answer-text" style="font-size: 14px; color: #0f172a; font-weight: 500; line-height: 1.5; margin-bottom: 16px;">
+                                Select a suggested question or type a query above to query the current CareGrid state.
+                            </div>
+                            <div id="intel-evidence-box" style="display: none; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
+                                <span style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 8px; display: block;">EVIDENCE & STRUCTURED CONTEXT</span>
+                                <ul id="intel-evidence-list" style="font-size: 12px; color: #334155; padding-left: 18px; line-height: 1.6;">
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- CAREGRID CONTEXT SNAPSHOT CARD -->
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
+                            <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">CAREGRID CONTEXT</span>
+                            <div class="cap-item"><span style="color: var(--text-secondary);">Patients in Queue</span><span class="cap-val" id="icontext-queue">--</span></div>
+                            <div class="cap-item"><span style="color: var(--text-secondary);">Critical Patients</span><span class="cap-val" style="color: var(--status-critical);" id="icontext-critical">--</span></div>
+                            <div class="cap-item"><span style="color: var(--text-secondary);">Top-Ranked Patient</span><span class="cap-val" id="icontext-toppatient">--</span></div>
+                            <div class="cap-item"><span style="color: var(--text-secondary);">Current Top Priority</span><span class="cap-val" style="color: var(--status-success);" id="icontext-topscore">--</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: SIMULATION PANE -->
+            <div class="tab-pane" id="pane-simulation">
+                <div class="ui-card">
+                    <div class="card-header" style="margin-bottom: 16px;">
+                        <div class="card-title-group">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="version-badge neon-capsule" style="background: #e2e8f0; color: #334155; font-size: 10px;">HYPOTHETICAL SANDBOX</span>
+                                <h2 style="margin: 0; font-size: 18px; font-weight: 800; color: #0f172a;">What-If Simulation Engine</h2>
+                            </div>
+                            <p class="card-subtitle">Evaluate queue re-ranking impact of hypothetical clinical and operational scenario changes without altering live state.</p>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 340px 1fr; gap: 20px;">
+                        <!-- Left Column: What-If Scenario Builder -->
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                            <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #0284c7;">SCENARIO BUILDER</span>
+                            
+                            <!-- Select Patient -->
+                            <div>
+                                <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">TARGET PATIENT</label>
+                                <select id="whatif-patient-select" style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 600; color: #0f172a; background: #f8fafc;">
+                                    <option value="P-134786">P-134786 (Rank #3)</option>
+                                </select>
+                            </div>
+
+                            <!-- Factor 1: Waiting Time -->
+                            <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span style="font-size: 11px; font-weight: 700; color: #334155;">WAITING TIME (MIN)</span>
+                                    <span style="font-size: 10px; font-family: var(--font-mono); color: #64748b;" id="whatif-cur-wait">Live: 131m</span>
+                                </div>
+                                <input type="number" id="whatif-input-wait" placeholder="Hypothetical mins (e.g. 161)" style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px;">
+                            </div>
+
+                            <!-- Factor 2: SOFA Score -->
+                            <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span style="font-size: 11px; font-weight: 700; color: #334155;">SOFA ORGAN FAILURE (0-20)</span>
+                                    <span style="font-size: 10px; font-family: var(--font-mono); color: #64748b;" id="whatif-cur-sofa">Live: SOFA 18.0</span>
+                                </div>
+                                <input type="number" id="whatif-input-sofa" step="0.5" min="0" max="20" placeholder="Hypothetical SOFA (e.g. 19.0)" style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px;">
+                            </div>
+
+                            <!-- Factor 3: Survival Potential -->
+                            <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span style="font-size: 11px; font-weight: 700; color: #334155;">SURVIVAL POTENTIAL (%)</span>
+                                    <span style="font-size: 10px; font-family: var(--font-mono); color: #64748b;" id="whatif-cur-surv">Live: 57.0%</span>
+                                </div>
+                                <input type="number" id="whatif-input-surv" step="1" min="0" max="100" placeholder="Hypothetical % (e.g. 75)" style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px;">
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 4px;">
+                                <button id="btn-run-whatif" class="btn-ops" style="background: #0284c7; padding: 11px; font-size: 12px; font-weight: 700; border-radius: 8px;">⚡ RUN WHAT-IF SIMULATION</button>
+                                <button id="btn-reset-whatif" class="btn-ops" style="background: #64748b; padding: 8px; font-size: 11px; font-weight: 600; border-radius: 8px;">🔄 RESET SIMULATION</button>
+                            </div>
+
+                            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 4px 0;">
+
+                            <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #64748b;">PRE-SET CLINICAL CONTROLS</span>
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <button id="sim-act-critical" class="btn-ops" style="background: #059669; padding: 8px; font-size: 11px;">+ ADD EMERGENCY STAT PATIENT</button>
+                                <button id="sim-act-spike" class="btn-ops" style="background: #d97706; padding: 8px; font-size: 11px;">SEVERITY SPIKE (P-137517)</button>
+                                <button id="sim-act-advance" class="btn-ops" style="background: #0284c7; padding: 8px; font-size: 11px;">ADVANCE WAIT CLOCK (+30M)</button>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Before -> Event -> After Visual Report -->
+                        <div id="sim-output-container" style="background: #f8fafc; border-radius: 12px; padding: 18px; border: 1px solid #e2e8f0; max-height: 80vh; overflow-y: auto;">
+                            <div style="text-align: center; padding: 40px 20px; color: #64748b;">
+                                <span style="font-size: 28px; display: block; margin-bottom: 8px;">⚡</span>
+                                <h3 style="font-size: 15px; font-weight: 700; color: #334155; margin-bottom: 4px;">What-If Scenario Sandbox Ready</h3>
+                                <p style="font-size: 12px; max-width: 420px; margin: 0 auto;">Select a patient and modify hypothetical factors on the left to evaluate score deltas, rank movements, and factor contribution shifts without mutating live state.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: AUDIT LOG PANE -->
+            <div class="tab-pane" id="pane-audit">
+                <div class="ui-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h2>Immutable Decision Audit Trail</h2>
+                            <p class="card-subtitle">Complete chronological trace of queue re-rankings and tie-break decisions</p>
+                        </div>
+                    </div>
+
+                    <div id="audit-timeline-body" style="display: flex; flex-direction: column; gap: 12px;">
+                        <p style="font-size: 13px; color: var(--text-secondary);">Loading decision audit trail...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: METHODOLOGY PANE -->
+            <div class="tab-pane" id="pane-methodology">
+                <div class="ui-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h2>Prioritization Methodology</h2>
+                            <p class="card-subtitle">Mathematical formula & deterministic scoring pipeline</p>
+                        </div>
+                    </div>
+
+                    <div style="font-size: 13px; color: #334155; line-height: 1.6;">
+                        <p style="margin-bottom: 12px;"><strong>Score Formula:</strong> Priority Score = (Severity × W_sev) + (Survival × W_surv) + (Wait × W_wait)</p>
+                        <p style="margin-bottom: 12px;"><strong>SOFA Normalization:</strong> Severity = clamp(SOFA / 20.0 × 100.0, 0, 100)</p>
+                        <p><strong>Tie-Breaking Policy:</strong> Tier 1 Severity Contribution → Tier 2 Waiting Duration → Tier 3 Survival Potential → Tier 4 Patient ID.</p>
+                    </div>
+
+                    <div style="margin-top: 24px;">
+                        <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 12px;">Scoring Weight Configuration</h3>
+                        <form id="ops-weights-form" style="display: flex; flex-direction: column; gap: 14px;">
+                            <div>
+                                <label style="font-size: 12px; font-weight: 600;">Severity Weight (SOFA Derived): <span id="val-sev">0.50</span></label>
+                                <input type="range" id="weight-sev" min="0" max="1" step="0.05" value="0.50" style="width: 100%;">
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; font-weight: 600;">Survival Likelihood Weight: <span id="val-surv">0.30</span></label>
+                                <input type="range" id="weight-surv" min="0" max="1" step="0.05" value="0.30" style="width: 100%;">
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; font-weight: 600;">Waiting Duration Weight: <span id="val-wait">0.20</span></label>
+                                <input type="range" id="weight-wait" min="0" max="1" step="0.05" value="0.20" style="width: 100%;">
+                            </div>
+                            <button type="submit" class="btn-ops" style="padding: 10px 16px;">APPLY WEIGHTS & RE-RANK ENGINE</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 5: RESEARCH PANE -->
+            <div class="tab-pane" id="pane-research">
+                <div class="ui-card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h2>Academic Research & Literature Grounding</h2>
+                            <p class="card-subtitle">Prioritization literature and CareGrid clinical gap</p>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <div style="background: #f8fafc; border-radius: 12px; padding: 16px;">
+                            <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">PROBLEM STATEMENT</h4>
+                            <p style="font-size: 12px; color: #475569;">ICU capacity constraints during surge scenarios require transparent, objective, and auditable prioritization.</p>
+                        </div>
+                        <div style="background: #f8fafc; border-radius: 12px; padding: 16px;">
+                            <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">EXISTING APPROACHES</h4>
+                            <p style="font-size: 12px; color: #475569;">Legacy systems rely on point-in-time organ failure scores (SOFA, SAPS-I) or static triage guidelines.</p>
+                        </div>
+                        <div style="background: #f8fafc; border-radius: 12px; padding: 16px;">
+                            <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">IDENTIFIED RESEARCH GAP</h4>
+                            <p style="font-size: 12px; color: #475569;">CareGrid bridges physiological failure scoring and capacity management by combining organ failure, survival likelihood, and waiting duration equity.</p>
+                        </div>
+                        <div style="background: #f8fafc; border-radius: 12px; padding: 16px;">
+                            <h4 style="font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 4px;">CLINICAL SAFEGUARD</h4>
+                            <p style="font-size: 12px; color: #475569;">CareGrid operates strictly as clinician decision support. Final ICU admission decisions remain under clinician control.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Patient Detail Modal Overlay -->
+    <div id="patient-detail-modal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div>
+                    <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.8px; color: var(--text-muted); text-transform: uppercase;">PATIENT CLINICAL REPORT</span>
+                    <h2 id="modal-patient-id" style="font-size: 22px; font-weight: 800; color: #0f172a;">PATIENT P-139169</h2>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span class="status-badge critical" id="modal-status-badge">● CRITICAL</span>
+                    <button id="modal-close-btn" class="modal-close">✕</button>
+                </div>
+            </div>
+
+            <div class="modal-body">
+                <!-- Modal Sub-Tabs -->
+                <div class="panel-tabs-row" style="margin-bottom: 16px;">
+                    <button class="panel-tab-btn active" id="mtab-overview" data-tab="overview">OVERVIEW</button>
+                    <button class="panel-tab-btn" id="mtab-breakdown" data-tab="breakdown">BREAKDOWN</button>
+                    <button class="panel-tab-btn" id="mtab-why" data-tab="why">WHY #1</button>
+                </div>
+
+                <!-- Full Content View Container for Modal -->
+                <div id="modal-view-container">
+                    <!-- Dynamically rendered Overview / Breakdown / Why #Rank view -->
+                </div>
+
+                <!-- ─────────────────────────────────────────────────── -->
+                <!-- V3.1 — CAREGRID INTELLIGENCE MODULE                 -->
+                <!-- ─────────────────────────────────────────────────── -->
+                <div style="border-top: 1px solid #e2e8f0; margin: 20px 0 16px;"></div>
+
+                <div id="modal-v31-intelligence">
+                    <!-- Header -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+                        <div>
+                            <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted);">CAREGRID INTELLIGENCE — V3.1</span>
+                            <h4 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 2px 0 0;">Ask CareGrid About This Patient</h4>
+                        </div>
+                        <span style="font-size: 10px; font-weight: 700; color: var(--accent-green); background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 20px; padding: 3px 10px; letter-spacing: 0.5px;">GROUNDED</span>
+                    </div>
+
+                    <!-- Score Breakdown Table -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;">
+                        <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); display: block; margin-bottom: 8px;">PRIORITY SCORE BREAKDOWN</span>
+                        <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 6px 16px; align-items: center;">
+                            <span style="font-size: 12px; color: #475569; font-weight: 600;">Severity (SOFA-derived)</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; color: #0f172a;" id="v31-sev-val">—</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--status-critical);" id="v31-sev-contrib">+—</span>
+
+                            <span style="font-size: 12px; color: #475569; font-weight: 600;">Survival Likelihood</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; color: #0f172a;" id="v31-surv-val">—</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--status-warning);" id="v31-surv-contrib">+—</span>
+
+                            <span style="font-size: 12px; color: #475569; font-weight: 600;">Waiting Duration Equity</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; color: #0f172a;" id="v31-wait-val">—</span>
+                            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #3b82f6;" id="v31-wait-contrib">+—</span>
+                        </div>
+                        <div style="border-top: 1px solid #e2e8f0; margin-top: 8px; padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px;">Dominant Factor</span>
+                            <span style="font-size: 12px; font-weight: 700; color: #0f172a;" id="v31-dominant">—</span>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div style="margin-bottom: 12px;">
+                        <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); display: block; margin-bottom: 8px;">QUICK ACTIONS</span>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <button class="v31-action-btn" id="v31-btn-why-ranked" data-mode="why_ranked">WHY IS THIS PATIENT RANKED HERE?</button>
+                            <button class="v31-action-btn" id="v31-btn-drivers" data-mode="drivers">WHAT DRIVES THIS PRIORITY?</button>
+                            <button class="v31-action-btn" id="v31-btn-simple" data-mode="simple">EXPLAIN THIS SIMPLY</button>
+                            <button class="v31-action-btn" id="v31-btn-why-not-1" data-mode="why_not_1">WHY IS THIS PATIENT NOT #1?</button>
+                            <button class="v31-action-btn" id="v31-btn-patient-audit" data-mode="patient_audit">WHAT CHANGED FOR THIS PATIENT?</button>
+                            <button class="v31-action-btn" id="v31-btn-trace-move" data-mode="trace_move">TRACE RANK CHANGE</button>
+                        </div>
+                    </div>
+
+                    <!-- Free-text query -->
+                    <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+                        <input type="text" id="v31-free-input" placeholder="Ask about this patient… e.g. What contributes most to this score?" style="flex: 1; padding: 9px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12px; font-family: var(--font-sans); color: #0f172a; background: #fff; outline: none;">
+                        <button id="v31-btn-ask" style="padding: 9px 16px; background: #0f172a; color: #fff; border: none; border-radius: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; cursor: pointer;">ASK</button>
+                    </div>
+
+                    <!-- AI Response Panel -->
+                    <div id="v31-response-panel" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
+                            <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); display: inline-block;"></span>
+                            <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--accent-green);">AI RESPONSE</span>
+                        </div>
+                        <div id="v31-response-text" style="font-size: 12px; line-height: 1.7; color: #1e293b; white-space: pre-wrap; font-family: var(--font-mono);"></div>
+                        <div style="border-top: 1px solid #e2e8f0; margin-top: 12px; padding-top: 8px; display: flex; align-items: center; justify-content: space-between;">
+                            <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted);">SOURCE</span>
+                            <span style="font-size: 10px; font-family: var(--font-mono); color: #475569;" id="v31-response-source">—</span>
+                        </div>
+                    </div>
+
+                    <!-- Error / Unavailable state -->
+                    <div id="v31-error-panel" style="display: none; padding: 10px 14px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; font-size: 12px; color: #92400e;">
+                        CAREGRID INTELLIGENCE UNAVAILABLE — Patient data and scoring remain fully operational.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <!-- V3.2 — PATIENT COMPARISON MODAL                     -->
+    <!-- ─────────────────────────────────────────────────── -->
+    <div id="patient-comparison-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 680px;">
+            <div class="modal-header">
+                <div>
+                    <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted);">CAREGRID INTELLIGENCE — V3.2</span>
+                    <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px;">Patient Comparison</h3>
+                </div>
+                <button id="compare-modal-close-btn" class="modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <!-- PATIENT A CARD -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
+                        <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">PATIENT A</div>
+                        <div style="font-size: 16px; font-weight: 800; color: #0f172a;" id="compa-id">P-139169</div>
+                        <div style="font-size: 12px; font-weight: 700; color: var(--accent-green);" id="compa-rank">Rank #1</div>
+                        <div style="font-family: var(--font-mono); font-size: 18px; font-weight: 800; color: #0f172a; margin: 8px 0;" id="compa-score">87.9</div>
+                        <div style="font-size: 11px; color: #475569; display: flex; flex-direction: column; gap: 2px;">
+                            <div>Severity: <strong id="compa-sev">100.0</strong></div>
+                            <div>Survival: <strong id="compa-surv">68.5%</strong></div>
+                            <div>Waiting: <strong id="compa-wait">104 min</strong></div>
+                        </div>
+                    </div>
+
+                    <!-- PATIENT B CARD -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
+                        <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">PATIENT B</div>
+                        <div style="font-size: 16px; font-weight: 800; color: #0f172a;" id="compb-id">P-134104</div>
+                        <div style="font-size: 12px; font-weight: 700; color: #64748b;" id="compb-rank">Rank #2</div>
+                        <div style="font-family: var(--font-mono); font-size: 18px; font-weight: 800; color: #0f172a; margin: 8px 0;" id="compb-score">81.9</div>
+                        <div style="font-size: 11px; color: #475569; display: flex; flex-direction: column; gap: 2px;">
+                            <div>Severity: <strong id="compb-sev">92.0</strong></div>
+                            <div>Survival: <strong id="compb-surv">62.0%</strong></div>
+                            <div>Waiting: <strong id="compb-wait">95 min</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SCORE CONTRIBUTIONS TABLE -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+                    <span style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 10px;">SCORE CONTRIBUTIONS COMPARISON</span>
+                    <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 8px 24px; align-items: center; font-size: 12px;">
+                        <span style="font-weight: 600; color: #475569;">Severity Contribution</span>
+                        <span style="font-family: var(--font-mono); font-weight: 700; color: var(--status-critical);" id="comp-sev-a">+50.0 pts</span>
+                        <span style="font-family: var(--font-mono); font-weight: 700; color: var(--status-critical);" id="comp-sev-b">+46.0 pts</span>
+
+                        <span style="font-weight: 600; color: #475569;">Survival Contribution</span>
+                        <span style="font-family: var(--font-mono); font-weight: 700; color: var(--status-warning);" id="comp-surv-a">+20.6 pts</span>
+                        <span style="font-family: var(--font-mono); font-weight: 700; color: var(--status-warning);" id="comp-surv-b">+18.6 pts</span>
+
+                        <span style="font-weight: 600; color: #475569;">Waiting Duration Contribution</span>
+                        <span style="font-family: var(--font-mono); font-weight: 700; color: #3b82f6;" id="comp-wait-a">+17.3 pts</span>
+                        <span style="font-family: var(--font-mono); font-weight: 700; color: #3b82f6;" id="comp-wait-b">+17.3 pts</span>
+                    </div>
+                </div>
+
+                <!-- GROUNDED AI EXPLANATION -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                        <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); display: inline-block;"></span>
+                        <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent-green);">WHY THE DIFFERENCE?</span>
+                    </div>
+                    <div id="compare-ai-text" style="font-size: 12px; line-height: 1.65; color: #1e293b; white-space: pre-wrap; font-family: var(--font-mono);">
+                        Loading patient comparison...
+                    </div>
+                    <div style="border-top: 1px solid #e2e8f0; margin-top: 10px; padding-top: 6px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">SOURCE</span>
+                        <span style="font-size: 9px; font-family: var(--font-mono); color: #475569;" id="compare-ai-source">CareGrid Priority Engine | CareGrid Current Patient State</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <!-- V3.4 — BEFORE / EVENT / AFTER SIMULATION MODAL     -->
+    <!-- ─────────────────────────────────────────────────── -->
+    <div id="whatif-scenario-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 680px;">
+            <div class="modal-header">
+                <div>
+                    <span style="font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted);">CAREGRID INTELLIGENCE — V3.4</span>
+                    <h3 style="font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px;">Before ➔ Event ➔ After Simulation</h3>
+                </div>
+                <button id="whatif-modal-close-btn" class="modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 14px;">
+                    <span style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 8px;">SELECT SCENARIO ACTION</span>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <button class="v31-action-btn" id="wact-spike" data-action="severity_spike">SEVERITY SPIKE (SELECTED)</button>
+                        <button class="v31-action-btn" id="wact-advance" data-action="advance_time">ADVANCE WAIT CLOCK (+30M)</button>
+                        <button class="v31-action-btn" id="wact-new" data-action="new_critical_patient">SIMULATE NEW PATIENT</button>
+                        <button class="v31-action-btn" id="wact-discharge" data-action="discharge_top">SIMULATE BED AVAILABILITY</button>
+                    </div>
+                </div>
+
+                <!-- BEFORE → EVENT → AFTER VISUALIZATION CARD -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 14px;">
+                    <div style="display: grid; grid-template-columns: 1fr auto 1.1fr auto 1fr; gap: 8px; align-items: center; text-align: center;">
+                        <!-- BEFORE -->
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px;">
+                            <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">BEFORE</span>
+                            <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;" id="wbefore-id">P-139169</div>
+                            <div style="font-size: 11px; font-weight: 700; color: var(--accent-green);" id="wbefore-rank">Rank #1</div>
+                            <div style="font-family: var(--font-mono); font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 4px;" id="wbefore-score">87.9 pts</div>
+                        </div>
+                        <!-- ARROW 1 -->
+                        <div style="font-size: 16px; font-weight: 800; color: #64748b;">➔</div>
+                        <!-- EVENT -->
+                        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 10px;">
+                            <span style="font-size: 9px; font-weight: 800; color: #059669; text-transform: uppercase; display: block;">EVENT</span>
+                            <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-top: 2px;" id="wevent-title">SELECT EVENT</div>
+                            <div style="font-size: 10px; color: #475569;" id="wevent-sub">Deterministic Sim</div>
+                        </div>
+                        <!-- ARROW 2 -->
+                        <div style="font-size: 16px; font-weight: 800; color: #64748b;">➔</div>
+                        <!-- AFTER -->
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px;">
+                            <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">AFTER</span>
+                            <div style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 2px;" id="wafter-id">P-139169</div>
+                            <div style="font-size: 11px; font-weight: 700; color: var(--accent-green);" id="wafter-rank">Rank #1</div>
+                            <div style="font-family: var(--font-mono); font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 4px;" id="wafter-score">87.9 pts</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COMPACT RANK CHANGES TABLE -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; margin-bottom: 14px;">
+                    <span style="font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 8px;">RANK CHANGES TABLE</span>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid #e2e8f0; color: #64748b; text-align: left;">
+                                <th style="padding: 6px;">PATIENT</th>
+                                <th style="padding: 6px;">BEFORE</th>
+                                <th style="padding: 6px;">AFTER</th>
+                                <th style="padding: 6px;">MOVEMENT</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wtable-body">
+                            <tr>
+                                <td colspan="4" style="padding: 6px; color: var(--text-muted); text-align: center;">Select a scenario action above to compute rank movements.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- GROUNDED AI EXPLANATION -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent-green);">CAREGRID INTELLIGENCE — WHY DID THE RANKING CHANGE?</span>
+                        <span style="font-size: 9px; font-family: var(--font-mono); color: var(--text-muted);">V3.4 GROUNDED</span>
+                    </div>
+                    <div id="whatif-ai-text" style="font-size: 12px; line-height: 1.65; color: #1e293b; white-space: pre-wrap; font-family: var(--font-mono);">
+                        Select a scenario action above to simulate using the CareGrid Simulation Engine.
+                    </div>
+                    <div style="border-top: 1px solid #e2e8f0; margin-top: 10px; padding-top: 6px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">SOURCE</span>
+                        <span style="font-size: 9px; font-family: var(--font-mono); color: #475569;" id="whatif-ai-source">CareGrid Simulation Engine | CareGrid Arbitration Engine | CareGrid Current State</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dedicated Patient What-If Simulation Workspace Modal -->
+    <div id="patient-whatif-modal" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width: 820px; max-height: 85vh; overflow-y: auto;">
+            <div class="modal-header">
+                <div>
+                    <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.8px; color: var(--text-muted); text-transform: uppercase;">WHAT-IF SIMULATION WORKSPACE</span>
+                    <h2 id="modal-whatif-title" style="font-size: 20px; font-weight: 800; color: #0f172a;">WHAT-IF SCENARIO</h2>
+                </div>
+                <button id="modal-whatif-close-btn" class="modal-close" onclick="closeWhatIfModal()">✕</button>
+            </div>
+
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+                <!-- Live State Hero Summary -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="font-size: 10px; font-weight: 800; letter-spacing: 0.8px; color: #64748b; text-transform: uppercase;">TARGET PATIENT</span>
+                        <div style="font-size: 18px; font-weight: 800; color: #0f172a;" id="modal-whatif-target-pid">P-134786</div>
+                        <div style="font-size: 11px; color: #475569; margin-top: 2px;" id="modal-whatif-target-info">Live Rank #3 | Live Priority 82.1</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="font-size: 10px; font-weight: 800; letter-spacing: 0.8px; color: #64748b; text-transform: uppercase;">STATE POLICY</span>
+                        <div style="font-size: 12px; font-weight: 700; color: #0284c7;">SANDBOX ISOLATED</div>
+                        <div style="font-size: 10px; color: #64748b;">Live CareGrid state remains 100% unchanged</div>
+                    </div>
+                </div>
+
+                <!-- Scenario Builder Card -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                    <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #0284c7;">SCENARIO BUILDER</span>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                        <!-- Factor 1: Waiting Time -->
+                        <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <span style="font-size: 11px; font-weight: 700; color: #334155;">WAITING TIME (MIN)</span>
+                                <span style="font-size: 10px; font-family: var(--font-mono); color: #64748b;" id="mwhatif-cur-wait">Live: 131m</span>
+                            </div>
+                            <input type="number" id="mwhatif-input-wait" placeholder="e.g. 161" style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px;">
+                        </div>
+
+                        <!-- Factor 2: SOFA Score -->
+                        <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <span style="font-size: 11px; font-weight: 700; color: #334155;">SOFA SCORE (0-20)</span>
+                                <span style="font-size: 10px; font-family: var(--font-mono); color: #64748b;" id="mwhatif-cur-sofa">Live: SOFA 18.0</span>
+                            </div>
+                            <input type="number" id="mwhatif-input-sofa" step="0.5" min="0" max="20" placeholder="e.g. 19.0" style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px;">
+                        </div>
+
+                        <!-- Factor 3: Survival Potential -->
+                        <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <span style="font-size: 11px; font-weight: 700; color: #334155;">SURVIVAL POTENTIAL (%)</span>
+                                <span style="font-size: 10px; font-family: var(--font-mono); color: #64748b;" id="mwhatif-cur-surv">Live: 57.0%</span>
+                            </div>
+                            <input type="number" id="mwhatif-input-surv" step="1" min="0" max="100" placeholder="e.g. 75" style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px;">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px;">
+                        <button id="mwhatif-btn-reset" class="btn-ops" style="background: #64748b; padding: 8px 14px; font-size: 12px;">RESET SCENARIO</button>
+                        <button id="mwhatif-btn-run" class="btn-ops" style="background: #0284c7; padding: 8px 18px; font-size: 12px; font-weight: 700;">RUN WHAT-IF SIMULATION</button>
+                    </div>
+
+                    <!-- V6 Organ System Specific Hypothetical Scenario -->
+                    <div style="border-top: 1px solid #e2e8f0; padding-top: 10px; margin-top: 6px;">
+                        <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #0284c7; display: block; margin-bottom: 8px;">V6 ORGAN-SYSTEM SPECIFIC HYPOTHETICAL SCENARIO</span>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end;">
+                            <div>
+                                <span style="font-size: 10.5px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px;">TARGET ORGAN SYSTEM</span>
+                                <select id="mwhatif-organ-select" style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: #ffffff;">
+                                    <option value="respiratory">Respiratory System</option>
+                                    <option value="kidney">Kidney / Renal System</option>
+                                    <option value="cardiovascular">Cardiovascular System</option>
+                                    <option value="neurological">Neurological System</option>
+                                    <option value="coagulation">Coagulation System</option>
+                                    <option value="liver">Liver / Hepatic System</option>
+                                </select>
+                            </div>
+                            <div>
+                                <span style="font-size: 10.5px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px;">HYPOTHETICAL SEVERITY (0-100)</span>
+                                <input type="number" id="mwhatif-organ-score" min="0" max="100" placeholder="e.g. 80.0" style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px;">
+                            </div>
+                            <button id="mwhatif-btn-run-organ" class="btn-ops" style="background: #0f172a; padding: 8px 16px; font-size: 12px; font-weight: 700;" onclick="runModalOrganWhatIfSimulation();">RUN ORGAN WHAT-IF</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simulation Output Area -->
+                <div id="mwhatif-output-container" style="background: #f8fafc; border-radius: 12px; padding: 16px; border: 1px solid #e2e8f0;">
+                    <div style="text-align: center; padding: 30px 20px; color: #64748b;">
+                        <h4 style="font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 4px;">What-If Scenario Simulation Workspace Ready</h4>
+                        <p style="font-size: 12px; max-width: 460px; margin: 0 auto;">Enter hypothetical parameters above and click "RUN WHAT-IF SIMULATION" to evaluate BEFORE, EVENT, AFTER, COMPARISON, and RANK IMPACT without altering live state.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="closeWhatIfModal()" class="btn-ops" style="background: #64748b; padding: 8px 16px; font-size: 12px;">CLOSE WORKSPACE</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
