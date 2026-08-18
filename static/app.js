@@ -1398,125 +1398,51 @@ async function fetchPatientAuditHistory(patientId) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// PATIENT DETAIL TAB NAVIGATION BUG FIX — OVERVIEW / BREAKDOWN / WHY #RANK
+// PATIENT DETAIL TAB NAVIGATION — OVERVIEW / BREAKDOWN / WHY #RANK
 // ══════════════════════════════════════════════════════════════════════════════
 
-let currentPanelSubTab = "overview";
-let currentModalSubTab = "overview";
-
 function setupPanelSubTabs() {
-    // 1. Right Column Card Tabs
-    const pTabs = [
-        { id: "ptab-overview", mode: "overview" },
-        { id: "ptab-breakdown", mode: "breakdown" },
-        { id: "ptab-explanation", mode: "why" }
-    ];
+    const tabBtns = document.querySelectorAll(".panel-tabs-row .panel-tab-btn");
+    tabBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            tabBtns.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
 
-    pTabs.forEach(t => {
-        const btn = document.getElementById(t.id);
-        if (btn) {
-            btn.addEventListener("click", () => {
-                pTabs.forEach(item => {
-                    const b = document.getElementById(item.id);
-                    if (b) b.classList.remove("active");
-                });
-                btn.classList.add("active");
-                currentPanelSubTab = t.mode;
-                renderRightPanelTabContent(currentPanelSubTab);
-            });
-        }
+            const ptab = btn.dataset.ptab || btn.id.replace("ptab-", "");
+            
+            const overviewPane = document.getElementById("pview-overview");
+            const breakdownPane = document.getElementById("pview-breakdown");
+            const explainPane = document.getElementById("pview-explanation");
+
+            if (overviewPane) overviewPane.style.display = (ptab === "overview") ? "block" : "none";
+            if (breakdownPane) breakdownPane.style.display = (ptab === "breakdown") ? "block" : "none";
+            if (explainPane) explainPane.style.display = (ptab === "explanation" || ptab === "why") ? "block" : "none";
+
+            if (selectedPatientId) {
+                let patient = currentPatients.find(p => p.patient_id === selectedPatientId || p.record_id === selectedPatientId);
+                if (patient) {
+                    if (ptab === "breakdown") {
+                        updatePanelBreakdown(patient);
+                    } else if (ptab === "explanation" || ptab === "why") {
+                        updatePanelAIExplanation(selectedPatientId, activePanelWhyMode || "why_ranked");
+                    }
+                }
+            }
+        });
     });
 
-    // 2. Modal Sub-Tabs
-    const mTabs = [
-        { id: "mtab-overview", mode: "overview" },
-        { id: "mtab-breakdown", mode: "breakdown" },
-        { id: "mtab-why", mode: "why" }
-    ];
-
-    mTabs.forEach(t => {
-        const btn = document.getElementById(t.id);
-        if (btn) {
-            btn.addEventListener("click", () => {
-                mTabs.forEach(item => {
-                    const b = document.getElementById(item.id);
-                    if (b) b.classList.remove("active");
-                });
-                btn.classList.add("active");
-                currentModalSubTab = t.mode;
-                renderModalSubTabContent(currentModalSubTab);
-            });
-        }
+    // Quick action mode buttons in Why #Rank pane
+    const modeBtns = document.querySelectorAll("#pview-explanation .v31-action-btn");
+    modeBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            modeBtns.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            const mode = btn.dataset.mode || "why_ranked";
+            if (selectedPatientId) {
+                updatePanelAIExplanation(selectedPatientId, mode);
+            }
+        });
     });
-}
-
-async function renderRightPanelTabContent(tabMode) {
-    if (!selectedPatientId) return;
-    let patient = currentPatients.find(p => p.patient_id === selectedPatientId || p.record_id === selectedPatientId);
-    if (!patient) return;
-
-    // Update dynamic button label
-    const ptabWhy = document.getElementById("ptab-explanation");
-    if (ptabWhy) ptabWhy.textContent = `Why #${patient.rank}?`;
-
-    const rankEl = document.getElementById("panel-explain-rank-text");
-    const pidEl = document.getElementById("panel-explain-pid-text");
-    const scoreEl = document.getElementById("panel-explain-score-text");
-    if (rankEl) rankEl.textContent = `#${patient.rank}`;
-    if (pidEl) pidEl.textContent = patient.patient_id;
-    if (scoreEl) scoreEl.textContent = patient.priority_score.toFixed(1);
-
-    const explainText = document.getElementById("panel-explain-text");
-
-    if (tabMode === "overview") {
-        try {
-            const expRes = await fetch(`/api/explain/${patient.patient_id}`);
-            const expData = await expRes.json();
-            if (expData.status === "success" && explainText) {
-                explainText.textContent = expData.explainability.explanation_text;
-            }
-        } catch (err) {
-            if (explainText) explainText.textContent = `Patient ${patient.patient_id} holds Rank #${patient.rank} with priority score ${patient.priority_score.toFixed(1)}.`;
-        }
-    } else if (tabMode === "breakdown") {
-        const weights = { severity: 0.50, survival: 0.30, waiting: 0.20 };
-        const sevContrib  = +(patient.severity * weights.severity).toFixed(1);
-        const survContrib = +(patient.survival_likelihood * weights.survival).toFixed(1);
-        const waitRaw     = Math.min(100.0, patient.waiting_time_minutes / 1.2);
-        const waitContrib = +(waitRaw * weights.waiting).toFixed(1);
-
-        const contrib = { severity: sevContrib, survival: survContrib, waiting: waitContrib };
-        const dominantKey = Object.entries(contrib).sort((a,b) => b[1]-a[1])[0][0];
-        const dominantLabel = { severity: "Severity", survival: "Survival Likelihood", waiting: "Waiting Duration" }[dominantKey];
-
-        if (explainText) {
-            explainText.innerHTML = `
-                <strong>SCORE BREAKDOWN (Rank #${patient.rank})</strong><br>
-                • Severity (SOFA): +${sevContrib} pts (50% weight)<br>
-                • Survival Likelihood: +${survContrib} pts (30% weight)<br>
-                • Waiting Duration: +${waitContrib} pts (20% weight)<br>
-                <strong>Dominant Factor:</strong> ${dominantLabel}
-            `;
-        }
-    } else if (tabMode === "why") {
-        if (explainText) explainText.textContent = `Fetching grounded rank explanation for Patient ${patient.patient_id}...`;
-        try {
-            const askRes = await fetch("/api/intelligence/ask-patient", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    patient_id: patient.patient_id,
-                    mode: "why_ranked"
-                })
-            });
-            const askData = await askRes.json();
-            if (askData.status === "success" && explainText) {
-                explainText.textContent = askData.answer;
-            }
-        } catch (err) {
-            if (explainText) explainText.textContent = `Patient ${patient.patient_id} is ranked #${patient.rank} with priority score ${patient.priority_score.toFixed(1)}.`;
-        }
-    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
