@@ -6,7 +6,6 @@ and rank/score change history for explainability and auditability.
 
 from typing import Dict, Any, Optional
 from src.provenance import ProvenanceType, FieldProvenance
-from src.severity_engine import ClinicalSeverityEngine
 
 
 def clamp(val: float, min_val: float = 0.0, max_val: float = 100.0) -> float:
@@ -34,9 +33,6 @@ def calculate_derived_severity(sofa_score: Optional[float]) -> float:
         return clamp((sofa_val / 20.0) * 100.0, 0.0, 100.0)
     except (ValueError, TypeError):
         return 0.0
-
-
-_severity_engine_singleton = ClinicalSeverityEngine()
 
 
 class Patient:
@@ -130,14 +126,6 @@ class Patient:
             )
         }
 
-    def get_clinical_severity(self) -> Dict[str, Any]:
-        """Calculates 6-Factor organ system severity decomposition for V6."""
-        return _severity_engine_singleton.analyze_patient(
-            patient_id=self.patient_id,
-            sofa_score=self.sofa_score,
-            raw_params=self.raw_clinical_params
-        )
-
     def update_severity(self, new_sofa: float, event_trigger: str = "SEVERITY_UPDATED"):
         """Updates SOFA score, recalculates derived severity, and tracks change history."""
         self.sofa_score = float(new_sofa)
@@ -148,11 +136,6 @@ class Patient:
 
     def to_dict(self) -> Dict[str, Any]:
         """Returns JSON-serializable dictionary representation of patient."""
-        clin_sev = _severity_engine_singleton.analyze_patient(
-            patient_id=self.patient_id,
-            sofa_score=self.sofa_score,
-            raw_params=self.raw_clinical_params
-        )
         return {
             "record_id": self.record_id,
             "patient_id": self.patient_id,
@@ -178,6 +161,5 @@ class Patient:
             "tie_broken": self.tie_broken,
             "tie_break_rule": self.tie_break_rule,
             "raw_clinical_params": self.raw_clinical_params,
-            "clinical_severity": clin_sev,
             "provenance": {k: v.to_dict() for k, v in self.provenance.items()}
         }

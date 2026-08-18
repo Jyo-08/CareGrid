@@ -20,8 +20,8 @@ from src.priority_engine import PriorityEngine
 from src.audit_logger import AuditLogger
 from src.event_engine import EventEngine
 from src.simulation_engine import SimulationEngine
-from src.server import get_ranked_patients
 from src.intelligence_engine import IntelligenceEngine
+from src.server import get_ranked_patients
 
 
 class TestCareGrid(unittest.TestCase):
@@ -253,7 +253,7 @@ class TestCareGrid(unittest.TestCase):
         self.sim.seed_initial_state()
         res_why = self.intel.ask("Why is the top-ranked patient #1?")
         self.assertEqual(res_why["status"], "success")
-        self.assertTrue(any(term in res_why["source"] for term in ["CareGrid Current Priority State", "CareGrid Priority Engine", "Gemini API"]))
+        self.assertIn("CareGrid Current Priority State", res_why["source"])
         self.assertIn("evidence", res_why)
 
         res_sum = self.intel.ask("Summarize the current queue.")

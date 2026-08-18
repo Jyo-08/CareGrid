@@ -71,16 +71,7 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
         path = parsed_url.path
         query_params = urllib.parse.parse_qs(parsed_url.query)
 
-        if path.startswith("/api/patients/") and path.endswith("/clinical-severity"):
-            pid = path.split("/api/patients/")[1].split("/clinical-severity")[0].strip()
-            patient = event_engine.patients_map.get(pid)
-            if not patient:
-                self.send_json_response({"status": "error", "message": f"Patient {pid} not found"}, 404)
-            else:
-                clin_sev = patient.get_clinical_severity()
-                self.send_json_response({"status": "success", "patient_id": pid, "clinical_severity": clin_sev})
-
-        elif path == "/api/patients" or path == "/api/ranking":
+        if path == "/api/patients" or path == "/api/ranking":
             limit = int(query_params.get("limit", [50])[0])
             patients = event_engine.get_ranked_patients(limit=limit)
             response_data = {
@@ -203,29 +194,6 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
                 "thresholds": attention_engine.config.to_dict()
             })
 
-        elif path == "/api/attention/signals":
-            signals = attention_engine.evaluate_attention_signals(event_engine, audit_logger)
-            self.send_json_response({
-                "status": "success",
-                "signals": signals,
-                "count": len(signals),
-                "thresholds": {
-                    "near_tie": attention_engine.near_tie_threshold,
-                    "major_rank_change": attention_engine.major_rank_change_threshold,
-                    "waiting_time": attention_engine.waiting_time_threshold,
-                    "critical_load": attention_engine.critical_load_threshold
-                }
-            })
-
-        elif path == "/api/intelligence/attention":
-            try:
-                res = intelligence_engine.get_attention_signals()
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Attention signals unavailable: {str(e)}"}, 500)
-
-
-
         # Static UI Assets
         elif path == "/" or path == "/index.html":
             self.send_file_response(os.path.join(BASE_DIR, "static/index.html"), "text/html")
@@ -249,14 +217,10 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
 
         if path == "/api/intelligence/ask":
             q = data.get("question", "")
-            pid = data.get("patient_id", None)
             try:
-                res = intelligence_engine.ask(question=q, patient_id=pid)
+                res = intelligence_engine.ask(question=q)
                 self.send_json_response(res)
             except Exception as e:
-                import traceback
-                print(f"[INTELLIGENCE ERROR] path={path} error_type={type(e).__name__} message={str(e)}")
-                traceback.print_exc()
                 self.send_json_response({
                     "status": "error",
                     "message": f"CareGrid Intelligence Unavailable: {str(e)}"
@@ -298,114 +262,6 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json_response({"status": "error", "message": str(e)}, 500)
 
-        elif path == "/api/intelligence/compare":
-            patient_id_a = data.get("patient_id_a", "")
-            patient_id_b = data.get("patient_id_b", "")
-            if not patient_id_a or not patient_id_b:
-                self.send_json_response({"status": "error", "message": "Both patient_id_a and patient_id_b are required"}, 400)
-                return
-            try:
-                res = intelligence_engine.compare_patients(patient_id_a=patient_id_a, patient_id_b=patient_id_b)
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": str(e)}, 500)
-
-        elif path == "/api/intelligence/compare":
-            pid_a = data.get("patient_id_a", "")
-            pid_b = data.get("patient_id_b", "")
-            if not pid_a or not pid_b:
-                self.send_json_response({"status": "error", "message": "patient_id_a and patient_id_b are required"}, 400)
-                return
-            try:
-                res = intelligence_engine.compare_patients(pid_a=pid_a, pid_b=pid_b)
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Comparison failed: {str(e)}"}, 500)
-
-        elif path == "/api/intelligence/whatif":
-            question = data.get("question", "")
-            patient_id = data.get("patient_id", None)
-            try:
-                res = intelligence_engine.interpret_whatif(question=question, patient_id=patient_id)
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"What-If interpretation failed: {str(e)}"}, 500)
-
-        elif path == "/api/intelligence/explain-simulation":
-            sim_result = data.get("sim_result", {})
-            before_patient = data.get("before_patient", None)
-            after_patient = data.get("after_patient", None)
-            try:
-                res = intelligence_engine.explain_simulation_result(
-                    sim_result=sim_result,
-                    before_patient=before_patient,
-                    after_patient=after_patient
-                )
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Simulation explanation failed: {str(e)}"}, 500)
-
-        elif path == "/api/intelligence/explain-attention":
-            signal = data.get("signal", {})
-            try:
-                res = intelligence_engine.explain_attention_signal(signal)
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Attention explanation failed: {str(e)}"}, 500)
-
-        # V3.2 — Patient Comparison Intelligence
-        elif path == "/api/intelligence/compare":
-            pid_a = data.get("patient_id_a", "")
-            pid_b = data.get("patient_id_b", "")
-            if not pid_a or not pid_b:
-                self.send_json_response({"status": "error", "message": "patient_id_a and patient_id_b are required"}, 400)
-                return
-            try:
-                res = intelligence_engine.compare_patients(pid_a=pid_a, pid_b=pid_b)
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Comparison failed: {str(e)}"}, 500)
-
-        # V3.3 — What-If Interpretation (AI interprets; deterministic sim engine runs separately)
-        elif path == "/api/intelligence/whatif":
-            question   = data.get("question", "")
-            patient_id = data.get("patient_id", None)
-            try:
-                res = intelligence_engine.interpret_whatif(question=question, patient_id=patient_id)
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"What-If interpretation failed: {str(e)}"}, 500)
-
-        # V3.4 — Explain Simulation Result (Before/After)
-        elif path == "/api/intelligence/explain-simulation":
-            sim_result   = data.get("sim_result", {})
-            before_queue = data.get("before_queue", [])
-            try:
-                res = intelligence_engine.explain_simulation_result(
-                    sim_result=sim_result, before_queue=before_queue
-                )
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Simulation explanation failed: {str(e)}"}, 500)
-
-        # V3.5 — Audit Intelligence
-        elif path == "/api/intelligence/audit-summary":
-            patient_id = data.get("patient_id", None)
-            limit      = int(data.get("limit", 10))
-            try:
-                res = intelligence_engine.summarize_audit(patient_id=patient_id, limit=limit)
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Audit summary failed: {str(e)}"}, 500)
-
-        # V3.6 — Explain a specific attention signal
-        elif path == "/api/intelligence/explain-signal":
-            signal = data.get("signal", {})
-            try:
-                res = intelligence_engine.explain_attention_signal(signal=signal)
-                self.send_json_response(res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Signal explanation failed: {str(e)}"}, 500)
 
         elif path == "/api/priority-weights":
             try:
@@ -523,27 +379,6 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
                 self.send_json_response(sim_res)
             except Exception as e:
                 self.send_json_response({"status": "error", "message": f"What-If Simulation error: {str(e)}"}, 500)
-
-        elif path == "/api/simulation/what-if-organ":
-            pid = data.get("patient_id")
-            organ_system = data.get("organ_system", "respiratory")
-            target_score = float(data.get("target_score", 80.0))
-
-            if not pid:
-                self.send_json_response({"status": "error", "message": "patient_id is required for organ what-if simulation"}, 400)
-                return
-
-            try:
-                live_patients = event_engine.get_ranked_patients()
-                sim_res = whatif_engine.run_organ_what_if_scenario(
-                    live_patients=live_patients,
-                    patient_id=pid,
-                    organ_system=organ_system,
-                    target_score=target_score
-                )
-                self.send_json_response(sim_res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"Organ What-If Error: {str(e)}"}, 500)
 
         elif path == "/api/simulation/reset":
             res = sim_engine.reset_simulation()

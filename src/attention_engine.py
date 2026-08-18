@@ -176,18 +176,6 @@ class AttentionEngine:
         # 2. CRITICAL QUEUE LOAD
         critical_patients = [p for p in all_patients if p.severity >= self.config.critical_severity_threshold]
         if len(critical_patients) >= self.config.critical_queue_load_threshold:
-            dom_organs = []
-            for p in critical_patients[:5]:
-                try:
-                    clin = p.get_clinical_severity()
-                    for d in clin.get("dominant_contributors", []):
-                        sys_name = d.split(" ")[0]
-                        if sys_name not in dom_organs and sys_name != "All":
-                            dom_organs.append(sys_name)
-                except Exception:
-                    pass
-            organs_str = f" Dominant organ systems: {', '.join(dom_organs[:3])}." if dom_organs else ""
-
             signals.append({
                 "id": "sig-critical-load",
                 "signal_type": "CRITICAL_QUEUE_LOAD",
@@ -198,7 +186,7 @@ class AttentionEngine:
                 "severity_threshold": self.config.critical_severity_threshold,
                 "threshold": self.config.critical_queue_load_threshold,
                 "title": f"High Queue Load: {len(critical_patients)} Critical Patients",
-                "description": f"{len(critical_patients)} critical severity patients (severity ≥ {self.config.critical_severity_threshold:.1f}) currently await ICU bed arbitration (load threshold ≥ {self.config.critical_queue_load_threshold}).{organs_str}",
+                "description": f"{len(critical_patients)} critical severity patients (severity ≥ {self.config.critical_severity_threshold:.1f}) currently await ICU bed arbitration (load threshold ≥ {self.config.critical_queue_load_threshold}).",
                 "action_label": "FILTER CRITICAL",
                 "action_type": "filter_critical",
                 "patient_ids": [p.patient_id for p in critical_patients[:5]]

@@ -1,11 +1,9 @@
 """
-CareGrid V5.0 - What-If Simulation Engine Module
-Provides state-isolated hypothetical scenario simulation for CareGrid V5.0.
-Reuses the exact existing CareGrid PriorityEngine and ranking logic on deep-cloned sandbox state.
-ABSOLUTE RULE: Live patient data, live scores, and production database/audit log are NEVER modified.
+CareGrid V2 - Simulation Engine Module
+Runs real interactive simulation scenarios through the real CareGrid Priority and Event Engine.
+Supports reset, critical additions, severity spikes, wait time advances, and bed availability toggles.
 """
 
-import copy
 from typing import Dict, Any, List, Optional
 from src.data_loader import DataLoader
 from src.patient_model import Patient
@@ -202,8 +200,8 @@ class WhatIfSimulationEngine:
         }
 
         # 4. Compute deltas & rank shifts
-        score_delta = round(after_snapshot['priority_score'] - before_snapshot['priority_score'], 2)
-        rank_delta = before_snapshot['rank'] - after_snapshot['rank']  # Positive means moved UP in rank (#3 -> #1 = +2)
+        score_delta = round(after_snapshot["priority_score"] - before_snapshot["priority_score"], 2)
+        rank_delta = before_snapshot["rank"] - after_snapshot["rank"]  # Positive means moved UP in rank (#3 -> #1 = +2)
 
         factor_deltas = {
             "severity_contribution": round(after_snapshot["severity_contribution"] - before_snapshot["severity_contribution"], 2),
@@ -268,125 +266,4 @@ class WhatIfSimulationEngine:
             "affected_rank_shifts": affected_patients[:10],
             "deterministic_explanation": explanation_text,
             "source": "CareGrid Priority Engine (Isolated Simulation Copy)"
-        }
-
-    def run_organ_what_if_scenario(
-        self,
-        live_patients: List[Patient],
-        patient_id: str,
-        organ_system: str,
-        target_score: float
-    ) -> Dict[str, Any]:
-        """
-        CareGrid V6 Organ-System What-If Simulation.
-        Tests hypothetical organ deterioration or improvement (e.g. Respiratory severity 80.0)
-        on a deep-cloned sandbox copy of live queue state.
-        Calculates BEFORE, SCENARIO, AFTER, and DELTA metrics without mutating live queue.
-        """
-        if not live_patients:
-            return {"status": "error", "message": "Live patient queue is empty"}
-
-        # 1. Baseline ranking
-        live_queue = self.priority_engine.rank_patients([copy.deepcopy(p) for p in live_patients])
-        before_ranks = {p.patient_id: p.rank for p in live_queue}
-        target_live = next((p for p in live_queue if p.patient_id == patient_id), None)
-        if not target_live:
-            return {"status": "error", "message": f"Patient {patient_id} not found in live queue"}
-
-        before_clin_sev = target_live.get_clinical_severity()
-        before_organ_info = before_clin_sev["organ_systems"].get(organ_system.lower(), {})
-        before_organ_score = before_organ_info.get("score", 0.0)
-
-        before_snapshot = {
-            "patient_id": target_live.patient_id,
-            "rank": target_live.rank,
-            "priority_score": target_live.priority_score,
-            "sofa_score": target_live.sofa_score,
-            "overall_severity": target_live.severity,
-            "organ_system": organ_system.capitalize(),
-            "organ_score": before_organ_score,
-            "organ_category": before_organ_info.get("category", "N/A"),
-            "severity_contribution": target_live.severity_contribution,
-            "survival_contribution": target_live.survival_contribution,
-            "waiting_contribution": target_live.waiting_contribution
-        }
-
-        # 2. Deep clone for simulation
-        sim_queue = [copy.deepcopy(p) for p in live_patients]
-        target_sim = next((p for p in sim_queue if p.patient_id == patient_id), None)
-
-        # Map target organ score (0-100) to subscore (0-4) and adjust SOFA
-        new_organ_score = max(0.0, min(100.0, float(target_score)))
-        new_subscore = int(round(new_organ_score / 25.0))
-        old_subscore = before_organ_info.get("sofa_subscore", 0)
-
-        sub_diff = new_subscore - old_subscore
-        new_total_sofa = max(0.0, min(24.0, target_sim.sofa_score + sub_diff))
-        target_sim.update_severity(new_total_sofa, event_trigger="ORGAN_WHAT_IF_SIMULATION")
-
-        # 3. Recalculate Priority and Rerank
-        sim_ranked = self.priority_engine.rank_patients(sim_queue)
-        after_ranks = {p.patient_id: p.rank for p in sim_ranked}
-        target_after = next((p for p in sim_ranked if p.patient_id == patient_id), None)
-        after_clin_sev = target_after.get_clinical_severity()
-        after_organ_info = after_clin_sev["organ_systems"].get(organ_system.lower(), {})
-
-        after_snapshot = {
-            "patient_id": target_after.patient_id,
-            "rank": target_after.rank,
-            "priority_score": target_after.priority_score,
-            "sofa_score": target_after.sofa_score,
-            "overall_severity": target_after.severity,
-            "organ_system": organ_system.capitalize(),
-            "organ_score": new_organ_score,
-            "organ_category": after_organ_info.get("category", "Simulated"),
-            "severity_contribution": target_after.severity_contribution,
-            "survival_contribution": target_after.survival_contribution,
-            "waiting_contribution": target_after.waiting_contribution
-        }
-
-        score_delta = round(after_snapshot['priority_score'] - before_snapshot['priority_score'], 2)
-        rank_delta = before_snapshot['rank'] - after_snapshot['rank']  # Positive = moved UP (#8 -> #4 = +4)
-        organ_delta = round(new_organ_score - before_organ_score, 1)
-        severity_delta = round(after_snapshot['overall_severity'] - before_snapshot['overall_severity'], 1)
-
-        # Affected patient rank shifts
-        affected_patients = []
-        for p_id, b_r in before_ranks.items():
-            a_r = after_ranks.get(p_id)
-            if a_r and b_r != a_r:
-                r_diff = b_r - a_r
-                affected_patients.append({
-                    "patient_id": p_id,
-                    "before_rank": b_r,
-                    "after_rank": a_r,
-                    "rank_shift": f"#{b_r} -> #{a_r} ({'UP ' + str(r_diff) if r_diff > 0 else 'DOWN ' + str(abs(r_diff))})"
-                })
-
-        explanation_text = (
-            f"V6 ORGAN WHAT-IF SUMMARY: Adjusting {organ_system.capitalize()} severity for Patient {patient_id} "
-            f"from {before_organ_score:.0f} to {new_organ_score:.0f} ({'+' if organ_delta >= 0 else ''}{organ_delta:.0f} pts) "
-            f"changed Overall Severity from {before_snapshot['overall_severity']:.1f} to {after_snapshot['overall_severity']:.1f} "
-            f"and Priority Score from {before_snapshot['priority_score']:.1f} to {after_snapshot['priority_score']:.1f}. "
-            f"Rank Shift: #{before_snapshot['rank']} -> #{after_snapshot['rank']} ({'+' if rank_delta >= 0 else ''}{rank_delta}). "
-            f"Live CareGrid state remains 100% untouched."
-        )
-
-        return {
-            "status": "success",
-            "is_simulated": True,
-            "patient_id": patient_id,
-            "organ_system": organ_system.capitalize(),
-            "before_state": before_snapshot,
-            "after_state": after_snapshot,
-            "impact_summary": {
-                "organ_delta": organ_delta,
-                "severity_delta": severity_delta,
-                "score_delta": score_delta,
-                "rank_delta": rank_delta,
-                "rank_transition": f"#{before_snapshot['rank']} -> #{after_snapshot['rank']}"
-            },
-            "affected_rank_shifts": affected_patients[:10],
-            "deterministic_explanation": explanation_text,
-            "source": "CareGrid V6 Organ Severity Engine (Sandbox Copy)"
         }
