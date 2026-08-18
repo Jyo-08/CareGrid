@@ -134,6 +134,12 @@ class Patient:
         self.provenance["severity"].value = self.severity
         self.last_event_trigger = event_trigger
 
+    def get_clinical_decomposition(self) -> Dict[str, Any]:
+        """Evaluates V6 6-organ system clinical factor decomposition."""
+        from src.clinical_engine import ClinicalEngine
+        engine = ClinicalEngine()
+        return engine.evaluate_patient_clinical_factors(self)
+
     def to_dict(self) -> Dict[str, Any]:
         """Returns JSON-serializable dictionary representation of patient."""
         return {
@@ -161,5 +167,6 @@ class Patient:
             "tie_broken": self.tie_broken,
             "tie_break_rule": self.tie_break_rule,
             "raw_clinical_params": self.raw_clinical_params,
+            "clinical_factors": self.get_clinical_decomposition(),
             "provenance": {k: v.to_dict() for k, v in self.provenance.items()}
         }

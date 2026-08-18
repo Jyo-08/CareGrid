@@ -178,6 +178,26 @@ class WhatIfSimulationEngine:
                 "change": f"{'+' if diff >= 0 else ''}{diff}%"
             })
 
+        # Handle V6 Organ-System Severity Overrides
+        if "organ_overrides" in scenario_changes and scenario_changes["organ_overrides"]:
+            from src.clinical_engine import ClinicalEngine
+            c_engine = ClinicalEngine()
+            organ_overrides = scenario_changes["organ_overrides"]
+            old_decomp = target_sim.get_clinical_decomposition()
+            eval_res = c_engine.evaluate_patient_clinical_factors(target_sim, organ_overrides=organ_overrides)
+            new_overall = eval_res["overall_severity"]["score"]
+            target_sim.severity = new_overall
+            
+            for organ_key, new_val in organ_overrides.items():
+                old_val = old_decomp["clinical_factors"].get(organ_key, {}).get("severity", 0.0)
+                diff = round(float(new_val) - float(old_val), 1)
+                event_details.append({
+                    "factor": f"{organ_key.capitalize()} Organ Severity",
+                    "before": f"{old_val:.1f}/100",
+                    "after": f"{float(new_val):.1f}/100",
+                    "change": f"{'+' if diff >= 0 else ''}{diff} pts (Overall Sev -> {new_overall:.1f})"
+                })
+
         # 3. Recalculate priority scores & re-rank using EXISTING PriorityEngine
         sim_ranked = self.priority_engine.rank_patients(sim_queue)
         after_ranks = {p.patient_id: p.rank for p in sim_ranked}

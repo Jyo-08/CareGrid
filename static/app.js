@@ -291,6 +291,48 @@ async function fetchIntelligenceSnapshot() {
     }
 }
 
+function updateV6OrganSystemsUI(patient) {
+    if (!patient || !patient.clinical_factors) return;
+    const cf = patient.clinical_factors.clinical_factors;
+    if (!cf) return;
+
+    const organs = ["neuro", "cardio", "resp", "coag", "liver", "kidney"];
+    const organKeys = ["neurological", "cardiovascular", "respiratory", "coagulation", "liver", "kidney"];
+
+    organs.forEach((prefix, i) => {
+        const key = organKeys[i];
+        const data = cf[key];
+        const elScore = document.getElementById(`v6-${prefix}-score`);
+        const elStatus = document.getElementById(`v6-${prefix}-status`);
+
+        if (elScore && elStatus && data) {
+            if (!data.available) {
+                elScore.textContent = "UNAVAIL";
+                elScore.style.color = "#94a3b8";
+                elStatus.textContent = "DATA UNAVAILABLE";
+                elStatus.style.color = "#94a3b8";
+            } else {
+                elScore.textContent = `${data.severity.toFixed(1)}`;
+                elStatus.textContent = `${data.category}`;
+                
+                if (data.category === "CRITICAL") {
+                    elScore.style.color = "#dc2626";
+                    elStatus.style.color = "#dc2626";
+                } else if (data.category === "SEVERE") {
+                    elScore.style.color = "#ea580c";
+                    elStatus.style.color = "#ea580c";
+                } else if (data.category === "MODERATE") {
+                    elScore.style.color = "#d97706";
+                    elStatus.style.color = "#d97706";
+                } else {
+                    elScore.style.color = "#16a34a";
+                    elStatus.style.color = "#16a34a";
+                }
+            }
+        }
+    });
+}
+
 function applyFilter(filterName) {
     activeFilter = filterName;
     document.querySelectorAll(".card-filter-pills .filter-pill").forEach(btn => btn.classList.remove("active"));
@@ -372,6 +414,7 @@ async function fetchPatientsQueue() {
                 const kpiTopId = document.getElementById("kpi-top-id");
                 if (kpiTopScore) kpiTopScore.textContent = topP.priority_score.toFixed(1);
                 if (kpiTopId) kpiTopId.textContent = `#01 · ${topP.patient_id}`;
+                updateV6OrganSystemsUI(topP);
             }
 
             if (!selectedPatientId && currentPatients.length > 0) {

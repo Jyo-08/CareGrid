@@ -194,6 +194,46 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
                 "thresholds": attention_engine.config.to_dict()
             })
 
+        elif path == "/api/analytics/organ-distribution":
+            try:
+                all_patients = event_engine.get_ranked_patients()
+                distribution = {
+                    "neurological_critical": 0,
+                    "cardiovascular_critical": 0,
+                    "respiratory_critical": 0,
+                    "coagulation_critical": 0,
+                    "liver_critical": 0,
+                    "kidney_critical": 0,
+                    "data_unavailable_counts": {
+                        "neurological": 0,
+                        "cardiovascular": 0,
+                        "respiratory": 0,
+                        "coagulation": 0,
+                        "liver": 0,
+                        "kidney": 0
+                    }
+                }
+                for p in all_patients:
+                    decomp = getattr(p, "get_clinical_decomposition", None)
+                    if callable(decomp):
+                        c_data = decomp()
+                        c_factors = c_data.get("clinical_factors", {})
+                        for organ, o_info in c_factors.items():
+                            if not o_info.get("available"):
+                                distribution["data_unavailable_counts"][organ] += 1
+                            elif o_info.get("category") in ("CRITICAL", "SEVERE"):
+                                key_name = f"{organ}_critical"
+                                if key_name in distribution:
+                                    distribution[key_name] += 1
+
+                self.send_json_response({
+                    "status": "success",
+                    "organ_distribution": distribution,
+                    "total_patients": len(all_patients)
+                })
+            except Exception as e:
+                self.send_json_response({"status": "error", "message": str(e)}, 500)
+
         # Static UI Assets
         elif path == "/" or path == "/index.html":
             self.send_file_response(os.path.join(BASE_DIR, "static/index.html"), "text/html")

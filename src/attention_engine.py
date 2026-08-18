@@ -238,6 +238,28 @@ class AttentionEngine:
                 if len([s for s in signals if s["signal_type"] == "NEAR_TIE"]) >= 2:
                     break
 
+        # 5. V6 MULTI-ORGAN CRITICAL SIGNAL
+        for p in all_patients[:10]:
+            decomp = getattr(p, "get_clinical_decomposition", None)
+            if callable(decomp):
+                c_data = decomp()
+                c_factors = c_data.get("clinical_factors", {})
+                crit_organs = [k for k, v in c_factors.items() if v.get("category") == "CRITICAL"]
+                if len(crit_organs) >= 2:
+                    signals.append({
+                        "id": f"sig-multiorgan-{p.patient_id}",
+                        "signal_type": "MULTI_ORGAN_CRITICAL",
+                        "priority_order": 1,
+                        "severity_class": "critical",
+                        "badge_label": "MULTI-ORGAN CRITICAL",
+                        "patient_id": p.patient_id,
+                        "critical_organs": crit_organs,
+                        "title": f"Multi-Organ Failure Risk: Patient {p.patient_id}",
+                        "description": f"Patient {p.patient_id} has {len(crit_organs)} critical organ system failures ({', '.join([o.capitalize() for o in crit_organs])}).",
+                        "action_label": "INSPECT PATIENT",
+                        "action_type": "patient_detail"
+                    })
+
         # Sort signals by deterministic priority order
         signals.sort(key=lambda x: (x["priority_order"], x["id"]))
         return signals

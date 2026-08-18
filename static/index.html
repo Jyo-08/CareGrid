@@ -198,6 +198,50 @@
                     </div>
                 </div>
 
+                <!-- V6 OPEN INNOVATION: CLINICAL SEVERITY DECOMPOSITION CARD -->
+                <div class="ui-card" style="margin-bottom: 20px; padding: 14px 18px; border-left: 4px solid #0284c7;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div>
+                            <span class="sidebar-title" style="padding-left: 0; font-size: 10px; letter-spacing: 0.8px; color: #0284c7;">V6 CLINICAL FACTORS INNOVATION</span>
+                            <h4 style="font-size: 14px; font-weight: 800; color: #0f172a; margin: 2px 0 0;">Clinical Organ System Severity Decomposition (Top Patient Baseline)</h4>
+                        </div>
+                        <span style="font-size: 10px; font-weight: 700; color: #0284c7; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 4px; padding: 3px 8px;">6-ORGAN SYSTEM DECOMPOSITION</span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;" id="v6-organ-systems-grid">
+                        <div class="organ-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center;">
+                            <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">1. Neurological</span>
+                            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 4px 0;" id="v6-neuro-score">--</div>
+                            <span style="font-size: 9.5px; color: #64748b; font-weight: 600;" id="v6-neuro-status">GCS Scale</span>
+                        </div>
+                        <div class="organ-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center;">
+                            <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">2. Cardiovascular</span>
+                            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 4px 0;" id="v6-cardio-score">--</div>
+                            <span style="font-size: 9.5px; color: #64748b; font-weight: 600;" id="v6-cardio-status">MAP / HR</span>
+                        </div>
+                        <div class="organ-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center;">
+                            <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">3. Respiratory</span>
+                            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 4px 0;" id="v6-resp-score">--</div>
+                            <span style="font-size: 9.5px; color: #64748b; font-weight: 600;" id="v6-resp-status">SaO2 / PaO2</span>
+                        </div>
+                        <div class="organ-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center;">
+                            <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">4. Coagulation</span>
+                            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 4px 0;" id="v6-coag-score">--</div>
+                            <span style="font-size: 9.5px; color: #64748b; font-weight: 600;" id="v6-coag-status">WBC / Platelets</span>
+                        </div>
+                        <div class="organ-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center;">
+                            <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">5. Liver</span>
+                            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 4px 0;" id="v6-liver-score">--</div>
+                            <span style="font-size: 9.5px; color: #64748b; font-weight: 600;" id="v6-liver-status">Lactate / Bilirubin</span>
+                        </div>
+                        <div class="organ-card" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center;">
+                            <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">6. Kidney</span>
+                            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 4px 0;" id="v6-kidney-score">--</div>
+                            <span style="font-size: 9.5px; color: #64748b; font-weight: 600;" id="v6-kidney-status">Creatinine / Urine</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- VISUAL ANALYTICS SECTION (Chart 1 & Chart 5) -->
                 <div class="visual-analytics-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 20px;">
                     <!-- Chart 1: Queue Priority Distribution -->
