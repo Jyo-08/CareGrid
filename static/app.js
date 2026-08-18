@@ -771,6 +771,11 @@ window.openPatientModal = async function(patientId) {
                       delta < 0 ? `↓ ${Math.abs(delta)} positions` : `-- Stable Position`;
     document.getElementById("modal-rank-delta").textContent = deltaText;
 
+    const mTabWhy = document.getElementById("mtab-why");
+    if (mTabWhy) {
+        mTabWhy.textContent = patient.rank === 1 ? "WHY #1" : `WHY #${patient.rank}`;
+    }
+
     document.getElementById("modal-sev-val").textContent = patient.severity;
     const sevFill = document.getElementById("mbar-fill-sev");
     if (sevFill) {
