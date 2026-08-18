@@ -264,12 +264,30 @@ class IntelligenceEngine:
             lines.append(f"• Total Score: {target_p.priority_score:.1f} pts\n")
             lines.append(f"Primary Driver: {dominant_name} (+{dominant_val:.1f} pts).\n")
 
-            if comp_p:
-                score_gap = round(comp_p.priority_score - target_p.priority_score, 1)
-                lines.append(f"WHY NOT RANK #1:")
-                lines.append(f"• Rank #1 Patient: {comp_p.patient_id}")
-                lines.append(f"• Rank #1 Priority Score: {comp_p.priority_score:.1f} pts")
-                lines.append(f"• Score Gap: {score_gap:.1f} pts above Patient {target_p.patient_id}.")
+        if comp_p:
+            score_gap = round(comp_p.priority_score - target_p.priority_score, 1)
+            lines.append(f"WHY NOT RANK #1:")
+            lines.append(f"• Rank #1 Patient: {comp_p.patient_id}")
+            lines.append(f"• Rank #1 Priority Score: {comp_p.priority_score:.1f} pts")
+            lines.append(f"• Score Gap: {score_gap:.1f} pts above Patient {target_p.patient_id}.")
+
+        decomp = getattr(target_p, "get_clinical_decomposition", None)
+        c_decomp = decomp() if callable(decomp) else {}
+        c_factors = c_decomp.get("clinical_factors", {})
+        overall_info = c_decomp.get("overall_severity", {})
+
+        if c_factors:
+            lines.append("\nV6 CLINICAL ORGAN-SYSTEM DECOMPOSITION:")
+            for organ_key, o_data in c_factors.items():
+                organ_name = o_data.get("name", organ_key.capitalize())
+                if not o_data.get("available"):
+                    lines.append(f"• {organ_name}: DATA UNAVAILABLE")
+                else:
+                    lines.append(f"• {organ_name}: {o_data.get('severity'):.1f}/100 ({o_data.get('category')}) — Evidence: {o_data.get('evidence')}")
+            
+            doms = overall_info.get("dominant_contributors", [])
+            if doms:
+                lines.append(f"Dominant Organ Drivers: {', '.join(doms)}")
 
         answer_text = "\n".join(lines)
 

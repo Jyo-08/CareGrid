@@ -1167,6 +1167,39 @@ function generatePatientViewHTML(patient, mode, explanationText, aiAnswerText) {
     const delta = patient.rank_delta || 0;
     const deltaText = isDischarged ? "Excluded from Active Queue" : (delta > 0 ? `↑ ${delta} positions` : delta < 0 ? `↓ ${Math.abs(delta)} positions` : `-- Stable Position`);
 
+    let v6DecompositionHtml = "";
+    if (patient.clinical_factors && patient.clinical_factors.clinical_factors) {
+        const cf = patient.clinical_factors.clinical_factors;
+        const organKeys = ["neurological", "cardiovascular", "respiratory", "coagulation", "liver", "kidney"];
+        const organRows = organKeys.map(k => {
+            const info = cf[k];
+            if (!info) return "";
+            const isAvail = info.available;
+            const scoreStr = isAvail ? `${info.severity.toFixed(1)}/100` : "UNAVAIL";
+            const catStr = isAvail ? info.category : "DATA UNAVAILABLE";
+            const color = !isAvail ? "#94a3b8" : (info.category === "CRITICAL" ? "#dc2626" : info.category === "SEVERE" ? "#ea580c" : info.category === "MODERATE" ? "#d97706" : "#16a34a");
+            return `
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; font-size: 11px;">
+                    <div style="font-size: 9.5px; font-weight: 800; color: #475569; text-transform: uppercase;">${info.name || k}</div>
+                    <div style="font-size: 12px; font-weight: 800; color: ${color}; font-family: var(--font-mono); margin-top: 2px;">${scoreStr}</div>
+                    <div style="font-size: 8.5px; font-weight: 700; color: ${color};">${catStr}</div>
+                </div>
+            `;
+        }).join("");
+
+        v6DecompositionHtml = `
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span class="sidebar-title" style="padding-left: 0; font-size: 10px; letter-spacing: 0.8px;">V6 CLINICAL ORGAN SYSTEM DECOMPOSITION</span>
+                    <span style="font-size: 9.5px; font-weight: 700; color: #0284c7; background: #e0f2fe; border-radius: 4px; padding: 1px 6px;">6-ORGAN SYSTEM</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px;">
+                    ${organRows}
+                </div>
+            </div>
+        `;
+    }
+
     if (mode === "overview") {
         let rawParamsHtml = "";
         const raw = patient.parameters || patient.raw_clinical_params || {};
@@ -1235,6 +1268,8 @@ function generatePatientViewHTML(patient, mode, explanationText, aiAnswerText) {
                         <div><span style="color: #64748b; font-weight: 600;">Service Unit:</span> <strong style="color: #0f172a;">ICU Allocation</strong></div>
                     </div>
                 </div>
+
+                ${v6DecompositionHtml}
 
                 ${rawParamsHtml ? `
                 <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
