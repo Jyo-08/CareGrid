@@ -133,12 +133,17 @@ class PriorityEngine:
         """Generates a deterministic clinical explainability structure for a patient."""
         self.calculate_priority_score(patient)
 
-        explanation_text = (
-            f"Patient {patient.patient_id} is ranked #{patient.rank} with a priority score of {patient.priority_score:.1f}/100. "
-            f"Contributions: Severity={patient.severity_contribution:.1f} (SOFA {patient.sofa_score}), "
-            f"Survival={patient.survival_contribution:.1f} ({patient.survival_likelihood}%), "
-            f"Wait={patient.waiting_contribution:.1f} ({patient.waiting_time_minutes} min)."
-        )
+        if patient.patient_status == "Discharged":
+            explanation_text = (
+                f"Patient {patient.patient_id} has been discharged from the ICU queue and holds no active queue rank position."
+            )
+        else:
+            explanation_text = (
+                f"Patient {patient.patient_id} is ranked #{patient.rank} with a priority score of {patient.priority_score:.1f}/100. "
+                f"Contributions: Severity={patient.severity_contribution:.1f} (SOFA {patient.sofa_score}), "
+                f"Survival={patient.survival_contribution:.1f} ({patient.survival_likelihood}%), "
+                f"Wait={patient.waiting_contribution:.1f} ({patient.waiting_time_minutes} min)."
+            )
 
         comparison_explanation = None
         if compare_to:

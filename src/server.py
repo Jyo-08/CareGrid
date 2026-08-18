@@ -12,7 +12,7 @@ from src.data_loader import DataLoader
 from src.priority_engine import PriorityEngine
 from src.audit_logger import AuditLogger
 from src.event_engine import EventEngine
-from src.simulation_engine import SimulationEngine
+from src.simulation_engine import SimulationEngine, WhatIfSimulationEngine
 from src.intelligence_engine import IntelligenceEngine
 from src.attention_engine import AttentionEngine
 
@@ -27,6 +27,7 @@ event_engine = EventEngine(priority_engine=priority_engine, audit_logger=audit_l
 attention_engine = AttentionEngine()
 event_engine.attention_engine = attention_engine
 sim_engine = SimulationEngine(data_loader=loader, event_engine=event_engine)
+whatif_engine = WhatIfSimulationEngine(priority_engine=priority_engine)
 intelligence_engine = IntelligenceEngine(event_engine=event_engine, priority_engine=priority_engine)
 
 # Seed initial state
@@ -119,6 +120,8 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
             pid = path.replace("/api/explain/", "").strip()
             all_patients = event_engine.get_ranked_patients()
             target = next((p for p in all_patients if p.patient_id == pid or p.record_id == pid), None)
+            if not target:
+                target = event_engine.patients_map.get(pid)
             
             compare_pid = query_params.get("compare_with", [None])[0]
             compare_target = next((p for p in all_patients if p.patient_id == compare_pid or p.record_id == compare_pid), None) if compare_pid else None
@@ -176,18 +179,19 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
             changes = intelligence_engine.detect_major_rank_changes(threshold=threshold)
             self.send_json_response({"status": "success", "major_changes": changes, "count": len(changes)})
 
+        elif path == "/api/attention/config":
+            self.send_json_response({
+                "status": "success",
+                "config": attention_engine.config.to_dict()
+            })
+
         elif path == "/api/attention/signals":
             signals = attention_engine.evaluate_attention_signals(event_engine, audit_logger)
             self.send_json_response({
                 "status": "success",
                 "signals": signals,
                 "count": len(signals),
-                "thresholds": {
-                    "near_tie": attention_engine.near_tie_threshold,
-                    "major_rank_change": attention_engine.major_rank_change_threshold,
-                    "waiting_time": attention_engine.waiting_time_threshold,
-                    "critical_load": attention_engine.critical_load_threshold
-                }
+                "thresholds": attention_engine.config.to_dict()
             })
 
         # Static UI Assets
@@ -277,6 +281,48 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json_response({"status": "error", "message": str(e)}, 400)
 
+        elif path == "/api/attention/config":
+            try:
+                prev_config = attention_engine.config.to_dict()
+                if data.get("reset") is True:
+                    new_config = attention_engine.config.reset_to_defaults()
+                    audit_logger.log_event(
+                        event_type="ATTENTION_CONFIG_RESET",
+                        previous_value=prev_config,
+                        new_value=new_config,
+                        reason="Attention Engine operational thresholds reset to default baseline policy",
+                        source="USER_INTERFACE"
+                    )
+                    self.send_json_response({
+                        "status": "success",
+                        "message": "Attention Configuration reset to default baseline",
+                        "config": new_config
+                    })
+                else:
+                    new_config = attention_engine.config.update(
+                        near_tie_threshold=data.get("near_tie_threshold"),
+                        critical_severity_threshold=data.get("critical_severity_threshold"),
+                        critical_queue_load_threshold=data.get("critical_queue_load_threshold"),
+                        waiting_time_threshold=data.get("waiting_time_threshold"),
+                        major_rank_change_threshold=data.get("major_rank_change_threshold")
+                    )
+                    audit_logger.log_event(
+                        event_type="ATTENTION_CONFIG_UPDATED",
+                        previous_value=prev_config,
+                        new_value=new_config,
+                        reason=f"Attention Engine threshold configuration updated: NearTie={new_config['near_tie_threshold']}, CritSev={new_config['critical_severity_threshold']}, CritLoad={new_config['critical_queue_load_threshold']}, WaitTime={new_config['waiting_time_threshold']}, RankChange={new_config['major_rank_change_threshold']}",
+                        source="USER_INTERFACE"
+                    )
+                    self.send_json_response({
+                        "status": "success",
+                        "message": "Attention Configuration updated successfully",
+                        "config": new_config
+                    })
+            except ValueError as ve:
+                self.send_json_response({"status": "error", "message": str(ve)}, 400)
+            except Exception as e:
+                self.send_json_response({"status": "error", "message": str(e)}, 500)
+
         elif path == "/api/events":
             evt_type = data.get("event_type")
             pid = data.get("patient_id")
@@ -308,6 +354,31 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
                 self.send_json_response(res)
             except Exception as e:
                 self.send_json_response({"status": "error", "message": str(e)}, 400)
+
+        elif path == "/api/simulation/what-if":
+            pid = data.get("patient_id")
+            scenario_changes = data.get("scenario_changes", {})
+            cap_change = int(data.get("capacity_change", 0))
+
+            if not pid:
+                self.send_json_response({"status": "error", "message": "patient_id is required for what-if simulation"}, 400)
+                return
+
+            if not scenario_changes:
+                self.send_json_response({"status": "error", "message": "scenario_changes must contain at least one factor update"}, 400)
+                return
+
+            try:
+                live_patients = event_engine.get_ranked_patients()
+                sim_res = whatif_engine.run_what_if_scenario(
+                    live_patients=live_patients,
+                    patient_id=pid,
+                    scenario_changes=scenario_changes,
+                    capacity_change=cap_change
+                )
+                self.send_json_response(sim_res)
+            except Exception as e:
+                self.send_json_response({"status": "error", "message": f"What-If Simulation error: {str(e)}"}, 500)
 
         elif path == "/api/simulation/reset":
             res = sim_engine.reset_simulation()

@@ -15,10 +15,12 @@ async function initApp() {
     setupIntelligenceListeners();
     setupV31IntelligenceListeners();
     setupPanelSubTabs();
+    setupAttentionConfigListeners();
     await fetchOverview();
     await fetchPatientsQueue();
     await fetchSideAuditEvents();
     await fetchMajorRankChanges();
+    await fetchAttentionConfig();
     await fetchAttentionSignals();
 }
 
@@ -98,6 +100,21 @@ function setupEventListeners() {
     setupSimAction("sim-act-discharge", "discharge_top");
     setupSimAction("sim-act-reset", "reset");
 
+    const btnOpenWhatIf = document.getElementById("btn-open-whatif");
+    if (btnOpenWhatIf) {
+        btnOpenWhatIf.addEventListener("click", () => openWhatIfModal());
+    }
+
+    const mRunWhatIf = document.getElementById("mwhatif-btn-run");
+    if (mRunWhatIf) {
+        mRunWhatIf.addEventListener("click", runModalWhatIfSimulation);
+    }
+
+    const mResetWhatIf = document.getElementById("mwhatif-btn-reset");
+    if (mResetWhatIf) {
+        mResetWhatIf.addEventListener("click", resetModalWhatIfReport);
+    }
+
     ["sev", "surv", "wait"].forEach(key => {
         const input = document.getElementById(`weight-${key}`);
         const display = document.getElementById(`val-${key}`);
@@ -140,8 +157,9 @@ function setupEventListeners() {
     const btnFullProf = document.getElementById("btn-open-full-profile");
     if (btnFullProf) {
         btnFullProf.addEventListener("click", () => {
-            if (selectedPatientId) {
-                openPatientModal(selectedPatientId);
+            const targetId = selectedPatientId || (currentPatients && currentPatients.length > 0 ? currentPatients[0].patient_id : null);
+            if (targetId) {
+                openPatientModal(targetId);
             }
         });
     }
@@ -389,7 +407,7 @@ function renderQueueTable(patients) {
                 <td>${p.severity}</td>
                 <td>${p.survival_likelihood}%</td>
                 <td>${p.waiting_time_minutes} min</td>
-                <td><button class="btn-ops" onclick="event.stopPropagation(); openPatientModal('${p.patient_id}')">VIEW</button></td>
+                <td><button class="btn-ops" onclick="event.stopPropagation(); selectPatientRow('${p.patient_id}', true);">VIEW</button></td>
             </tr>
         `;
     }).join("");
@@ -416,52 +434,18 @@ window.selectPatientRow = async function(patientId, openModal = false) {
     if (!patient) return;
 
     document.getElementById("panel-patient-id").textContent = `PATIENT ${patient.patient_id}`;
-    document.getElementById("panel-rank-badge").textContent = `RANK #${patient.rank}`;
-    document.getElementById("panel-score").textContent = patient.priority_score.toFixed(1);
     
     const panelStatusBadge = document.getElementById("panel-status-badge");
     if (panelStatusBadge) {
         panelStatusBadge.textContent = `● ${patient.patient_status.toUpperCase()}`;
         panelStatusBadge.className = patient.patient_status === "Critical" ? "status-badge critical" :
-                                      patient.patient_status === "Admitted" ? "status-badge admitted" : "status-badge waiting";
-    }
-
-    const delta = patient.rank_delta || 0;
-    const movementText = delta > 0 ? `↑ ${delta} positions` :
-                         delta < 0 ? `↓ ${Math.abs(delta)} positions` : `-- Stable`;
-    document.getElementById("panel-rank-movement").textContent = movementText;
-
-    document.getElementById("panel-sev-val").textContent = patient.severity;
-    document.getElementById("bar-fill-sev").style.width = `${Math.min(100, patient.severity)}%`;
-
-    document.getElementById("panel-surv-val").textContent = `${patient.survival_likelihood}%`;
-    document.getElementById("bar-fill-surv").style.width = `${Math.min(100, patient.survival_likelihood)}%`;
-
-    document.getElementById("panel-wait-val").textContent = `${patient.waiting_time_minutes} min`;
-    const waitPct = Math.min(100, (patient.waiting_time_minutes / 120.0) * 100);
-    document.getElementById("bar-fill-wait").style.width = `${waitPct}%`;
-
-    const explainCard = document.getElementById("panel-explain-card");
-    if (explainCard) {
-        explainCard.style.borderLeftColor = patient.severity >= 70.0 ? "var(--status-critical)" :
-                                           patient.severity >= 40.0 ? "var(--status-warning)" : "var(--status-success)";
-    }
-
-    try {
-        const expRes = await fetch(`/api/explain/${patient.patient_id}`);
-        const expData = await expRes.json();
-        if (expData.status === "success") {
-            const exp = expData.explainability;
-            document.getElementById("panel-explain-text").textContent = exp.explanation_text;
-        }
-    } catch (err) {
-        console.error("Explainability fetch error:", err);
+                                      patient.patient_status === "Admitted" ? "status-badge admitted" :
+                                      patient.patient_status === "Discharged" ? "status-badge warning" : "status-badge waiting";
     }
 
     const ptabWhy = document.getElementById("ptab-explanation");
-    if (ptabWhy) ptabWhy.textContent = `Why #${patient.rank}?`;
+    if (ptabWhy) ptabWhy.textContent = patient.patient_status === "Discharged" ? "WHY DISCHARGED" : (patient.rank ? `WHY #${patient.rank}` : "WHY EXPLANATION");
 
-    renderPatientBreakdownChart(patient);
     renderRightPanelTabContent(currentPanelSubTab);
 
     if (openModal) {
@@ -470,27 +454,39 @@ window.selectPatientRow = async function(patientId, openModal = false) {
 };
 
 window.openPatientModal = async function(patientId) {
-    selectedPatientId = patientId;
+    const targetId = patientId || selectedPatientId || (currentPatients && currentPatients.length > 0 ? currentPatients[0].patient_id : null);
+    if (!targetId) return;
+    selectedPatientId = targetId;
+
     const modal = document.getElementById("patient-detail-modal");
     if (!modal) return;
 
-    let patient = currentPatients.find(p => p.patient_id === patientId || p.record_id === patientId);
-    try {
-        const res = await fetch(`/api/patients/${patientId}`);
-        const data = await res.json();
-        if (data.status === "success") patient = data.patient;
-    } catch (err) {
-        console.error("Fetch patient modal details failed:", err);
+    let patient = currentPatients ? currentPatients.find(p => p.patient_id === targetId || p.record_id === targetId) : null;
+    if (!patient) {
+        try {
+            const res = await fetch(`/api/patients/${targetId}`);
+            const data = await res.json();
+            if (data.status === "success") patient = data.patient;
+        } catch (err) {
+            console.error("Fetch patient modal details failed:", err);
+        }
     }
 
     if (!patient) return;
 
-    document.getElementById("modal-patient-id").textContent = `PATIENT ${patient.patient_id}`;
-    document.getElementById("modal-rank").textContent = `RANK #${patient.rank}`;
-    document.getElementById("modal-priority-score").textContent = patient.priority_score.toFixed(1);
+    const modalTitle = document.getElementById("modal-patient-id");
+    if (modalTitle) modalTitle.textContent = `PATIENT ${patient.patient_id}`;
 
     const mtabWhy = document.getElementById("mtab-why");
     if (mtabWhy) mtabWhy.textContent = `WHY #${patient.rank}`;
+
+    const btnWhyRanked = document.getElementById("v31-btn-why-ranked");
+    if (btnWhyRanked) btnWhyRanked.textContent = `WHY IS THIS PATIENT RANKED #${patient.rank}?`;
+
+    const btnWhyNot1 = document.getElementById("v31-btn-why-not-1");
+    if (btnWhyNot1) {
+        btnWhyNot1.textContent = patient.rank === 1 ? `WHY IS THIS PATIENT RANKED #1?` : `WHY IS THIS PATIENT NOT #1?`;
+    }
 
     const statusBadge = document.getElementById("modal-status-badge");
     if (statusBadge) {
@@ -499,70 +495,33 @@ window.openPatientModal = async function(patientId) {
                                patient.patient_status === "Admitted" ? "status-badge admitted" : "status-badge waiting";
     }
 
-    const delta = patient.rank_delta || 0;
-    const deltaText = delta > 0 ? `↑ ${delta} positions` :
-                      delta < 0 ? `↓ ${Math.abs(delta)} positions` : `-- Stable Position`;
-    document.getElementById("modal-rank-delta").textContent = deltaText;
-
-    document.getElementById("modal-sev-val").textContent = patient.severity;
-    const sevFill = document.getElementById("mbar-fill-sev");
-    if (sevFill) {
-        sevFill.style.width = `${Math.min(100, patient.severity)}%`;
-        sevFill.style.backgroundColor = patient.severity >= 70.0 ? "var(--status-critical)" :
-                                        patient.severity >= 40.0 ? "var(--status-warning)" : "var(--status-success)";
-    }
-
-    document.getElementById("modal-surv-val").textContent = `${patient.survival_likelihood}%`;
-    const survFill = document.getElementById("mbar-fill-surv");
-    if (survFill) survFill.style.width = `${Math.min(100, patient.survival_likelihood)}%`;
-
-    document.getElementById("modal-wait-val").textContent = `${patient.waiting_time_minutes} min`;
-    const waitPct = Math.min(100, (patient.waiting_time_minutes / 120.0) * 100);
-    const waitFill = document.getElementById("mbar-fill-wait");
-    if (waitFill) waitFill.style.width = `${waitPct}%`;
-
-    const explainCard = document.getElementById("modal-explain-card");
-    if (explainCard) {
-        explainCard.style.borderLeftColor = patient.severity >= 70.0 ? "var(--status-critical)" :
-                                           patient.severity >= 40.0 ? "var(--status-warning)" : "var(--status-success)";
-    }
-
-    try {
-        const expRes = await fetch(`/api/explain/${patient.patient_id}`);
-        const expData = await expRes.json();
-        if (expData.status === "success") {
-            const exp = expData.explainability;
-            document.getElementById("modal-explain-text").textContent = exp.explanation_text;
-        }
-    } catch (err) {
-        console.error("Modal explainability error:", err);
-    }
-
-    const rawContainer = document.getElementById("modal-raw-params");
-    const raw = patient.raw_clinical_params || {};
-    rawContainer.innerHTML = `
-        <div class="raw-param-box"><span class="raw-param-label">SOFA Score</span> <span class="raw-param-val">${patient.sofa_score}</span></div>
-        <div class="raw-param-box"><span class="raw-param-label">SAPS-I Score</span> <span class="raw-param-val">${raw.SAPS_first || '14'}</span></div>
-        <div class="raw-param-box"><span class="raw-param-label">GCS Score</span> <span class="raw-param-val">${raw.GCS_first || '15'}</span></div>
-        <div class="raw-param-box"><span class="raw-param-label">Heart Rate (HR)</span> <span class="raw-param-val">${raw.HR_first || '88'} bpm</span></div>
-        <div class="raw-param-box"><span class="raw-param-label">Mean Arterial BP</span> <span class="raw-param-val">${raw.MAP_first || '75'} mmHg</span></div>
-        <div class="raw-param-box"><span class="raw-param-label">Creatinine</span> <span class="raw-param-val">${raw.Creatinine_first || '1.1'} mg/dL</span></div>
-        <div class="raw-param-box"><span class="raw-param-label">WBC Count</span> <span class="raw-param-val">${raw.WBC_first || '9.4'} k/uL</span></div>
-        <div class="raw-param-box"><span class="raw-param-label">Arrival Date</span> <span class="raw-param-val">${patient.arrival_time || '2025-03-16'}</span></div>
-    `;
-
-    modal.classList.remove("hidden");
-
-    // ── V3.1: Populate score breakdown table ───────────────────────
+    renderModalSubTabContent(currentModalSubTab);
+    loadPatientIntelligence(patient.patient_id);
     populateV31Breakdown(patient);
-    // ── V3.5: Populate patient recent activity & audit trace ───────
     fetchPatientAuditHistory(patient.patient_id);
-    // Reset response panel on new patient open
+
     const respPanel = document.getElementById("v31-response-panel");
     const errPanel  = document.getElementById("v31-error-panel");
     if (respPanel) respPanel.style.display = "none";
     if (errPanel)  errPanel.style.display  = "none";
+
+    modal.classList.remove("hidden");
 };
+
+window.inspectPatient = function(patientId) {
+    openPatientModal(patientId);
+};
+
+window.openPatientProfile = function(patientId) {
+    openPatientModal(patientId);
+};
+
+function loadPatientIntelligence(patientId) {
+    const respPanel = document.getElementById("v31-response-panel");
+    const errPanel  = document.getElementById("v31-error-panel");
+    if (respPanel) respPanel.style.display = "none";
+    if (errPanel)  errPanel.style.display  = "none";
+}
 
 // ── V3.1: Populate the static score breakdown from patient data ──────────────
 function populateV31Breakdown(patient) {
@@ -902,6 +861,145 @@ async function explainAttentionSignal(signalId) {
     }
 }
 
+function showAttentionConfigMsg(msg, isError = false) {
+    const el = document.getElementById("attention-config-msg");
+    if (!el) return;
+    el.style.display = "block";
+    if (isError) {
+        el.style.background = "#fef2f2";
+        el.style.color = "#dc2626";
+        el.style.border = "1px solid #fecaca";
+    } else {
+        el.style.background = "#f0fdf4";
+        el.style.color = "#166534";
+        el.style.border = "1px solid #bbf7d0";
+    }
+    el.textContent = msg;
+}
+
+async function fetchAttentionConfig() {
+    try {
+        const res = await fetch("/api/attention/config");
+        const data = await res.json();
+        if (data.status === "success" && data.config) {
+            const cfg = data.config;
+            if (document.getElementById("cfg-near-tie")) document.getElementById("cfg-near-tie").value = cfg.near_tie_threshold;
+            if (document.getElementById("cfg-crit-sev")) document.getElementById("cfg-crit-sev").value = cfg.critical_severity_threshold;
+            if (document.getElementById("cfg-crit-load")) document.getElementById("cfg-crit-load").value = cfg.critical_queue_load_threshold;
+            if (document.getElementById("cfg-wait-time")) document.getElementById("cfg-wait-time").value = cfg.waiting_time_threshold;
+            if (document.getElementById("cfg-rank-change")) document.getElementById("cfg-rank-change").value = cfg.major_rank_change_threshold;
+        }
+    } catch (err) {
+        console.error("Fetch attention config failed:", err);
+    }
+}
+
+async function applyAttentionConfig() {
+    const nearTieEl = document.getElementById("cfg-near-tie");
+    const critSevEl = document.getElementById("cfg-crit-sev");
+    const critLoadEl = document.getElementById("cfg-crit-load");
+    const waitTimeEl = document.getElementById("cfg-wait-time");
+    const rankChangeEl = document.getElementById("cfg-rank-change");
+
+    const nearTie = parseFloat(nearTieEl ? nearTieEl.value : "1.0");
+    const critSev = parseFloat(critSevEl ? critSevEl.value : "70.0");
+    const critLoad = parseInt(critLoadEl ? critLoadEl.value : "5", 10);
+    const waitTime = parseInt(waitTimeEl ? waitTimeEl.value : "120", 10);
+    const rankChange = parseInt(rankChangeEl ? rankChangeEl.value : "2", 10);
+
+    // Validation
+    if (isNaN(nearTie) || nearTie < 0) {
+        showAttentionConfigMsg("Validation Error: Near-tie gap threshold cannot be negative.", true);
+        return;
+    }
+    if (isNaN(critSev) || critSev < 0 || critSev > 100) {
+        showAttentionConfigMsg("Validation Error: Critical severity threshold must be between 0.0 and 100.0.", true);
+        return;
+    }
+    if (isNaN(critLoad) || critLoad < 1) {
+        showAttentionConfigMsg("Validation Error: Critical queue load threshold must be at least 1.", true);
+        return;
+    }
+    if (isNaN(waitTime) || waitTime < 0) {
+        showAttentionConfigMsg("Validation Error: Waiting time threshold cannot be negative.", true);
+        return;
+    }
+    if (isNaN(rankChange) || rankChange < 1) {
+        showAttentionConfigMsg("Validation Error: Major rank change threshold must be at least 1 position.", true);
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/attention/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                near_tie_threshold: nearTie,
+                critical_severity_threshold: critSev,
+                critical_queue_load_threshold: critLoad,
+                waiting_time_threshold: waitTime,
+                major_rank_change_threshold: rankChange
+            })
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+            showAttentionConfigMsg("Attention Configuration operational policy applied successfully.", false);
+            await fetchAttentionSignals();
+            if (typeof fetchSideAuditEvents === "function") fetchSideAuditEvents();
+        } else {
+            showAttentionConfigMsg(`Configuration Error: ${data.message || "Failed to update thresholds"}`, true);
+        }
+    } catch (err) {
+        showAttentionConfigMsg(`Network Error: ${err.message}`, true);
+    }
+}
+
+async function resetAttentionConfig() {
+    try {
+        const res = await fetch("/api/attention/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reset: true })
+        });
+        const data = await res.json();
+        if (data.status === "success" && data.config) {
+            const cfg = data.config;
+            if (document.getElementById("cfg-near-tie")) document.getElementById("cfg-near-tie").value = cfg.near_tie_threshold;
+            if (document.getElementById("cfg-crit-sev")) document.getElementById("cfg-crit-sev").value = cfg.critical_severity_threshold;
+            if (document.getElementById("cfg-crit-load")) document.getElementById("cfg-crit-load").value = cfg.critical_queue_load_threshold;
+            if (document.getElementById("cfg-wait-time")) document.getElementById("cfg-wait-time").value = cfg.waiting_time_threshold;
+            if (document.getElementById("cfg-rank-change")) document.getElementById("cfg-rank-change").value = cfg.major_rank_change_threshold;
+            showAttentionConfigMsg("Attention Configuration operational policy reset to default baseline.", false);
+            await fetchAttentionSignals();
+            if (typeof fetchSideAuditEvents === "function") fetchSideAuditEvents();
+        } else {
+            showAttentionConfigMsg("Failed to reset configuration to defaults", true);
+        }
+    } catch (err) {
+        showAttentionConfigMsg(`Network Error: ${err.message}`, true);
+    }
+}
+
+function setupAttentionConfigListeners() {
+    const btnToggle = document.getElementById("btn-toggle-attn-config");
+    const panel = document.getElementById("attention-config-panel");
+    const btnApply = document.getElementById("btn-apply-attn-config");
+    const btnReset = document.getElementById("btn-reset-attn-config");
+
+    if (btnToggle && panel) {
+        btnToggle.onclick = () => {
+            if (panel.style.display === "none" || !panel.style.display) {
+                panel.style.display = "block";
+                fetchAttentionConfig();
+            } else {
+                panel.style.display = "none";
+            }
+        };
+    }
+    if (btnApply) btnApply.onclick = applyAttentionConfig;
+    if (btnReset) btnReset.onclick = resetAttentionConfig;
+}
+
 async function fetchPatientAuditHistory(patientId) {
     const container = document.getElementById("v35-patient-audit-container");
     if (!container) return;
@@ -997,73 +1095,266 @@ function setupPanelSubTabs() {
     });
 }
 
+/* ============================================================
+   CAREGRID V5.0 FULL CONTENT VIEW GENERATOR (OVERVIEW / BREAKDOWN / WHY #RANK)
+   ============================================================ */
+
+function generatePatientViewHTML(patient, mode, explanationText, aiAnswerText) {
+    if (!patient) return "";
+
+    const weights = { severity: 0.50, survival: 0.30, waiting: 0.20 };
+    const sevContrib  = (patient.severity_contribution !== undefined) ? patient.severity_contribution : +(patient.severity * weights.severity).toFixed(1);
+    const survContrib = (patient.survival_contribution !== undefined) ? patient.survival_contribution : +(patient.survival_likelihood * weights.survival).toFixed(1);
+    const waitContrib = (patient.waiting_contribution !== undefined) ? patient.waiting_contribution : +(Math.min(100.0, patient.waiting_time_minutes / 1.2) * weights.waiting).toFixed(1);
+
+    const isDischarged = patient.patient_status === "Discharged";
+    const rankClass = isDischarged ? "status-badge warning" : (patient.rank === 1 ? "rank-badge rank-1" : patient.rank <= 3 ? "rank-badge rank-2" : "rank-badge rank-normal");
+    const rankBadgeText = isDischarged ? "DISCHARGED / NO ACTIVE RANK" : (!patient.rank ? "NO ACTIVE RANK" : `RANK #${patient.rank}`);
+    const delta = patient.rank_delta || 0;
+    const deltaText = isDischarged ? "Excluded from Active Queue" : (delta > 0 ? `↑ ${delta} positions` : delta < 0 ? `↓ ${Math.abs(delta)} positions` : `-- Stable Position`);
+
+    if (mode === "overview") {
+        let rawParamsHtml = "";
+        const raw = patient.parameters || patient.raw_clinical_params || {};
+        const keys = ["sofa", "saps_i", "gcs", "map", "sao2", "creatinine", "wbc", "lactate", "urine_output", "sysabp"];
+        rawParamsHtml = keys.map(k => {
+            const val = raw[k] || raw[k.toUpperCase()] || raw[`${k}_first`];
+            if (val === undefined || val === null) return "";
+            const lbl = k.toUpperCase().replace("_", " ");
+            return `
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; font-size: 11px;">
+                    <div style="font-size: 9.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">${lbl}</div>
+                    <div style="font-size: 12px; font-weight: 800; color: #0f172a; font-family: var(--font-mono); margin-top: 2px;">${val}</div>
+                </div>
+            `;
+        }).join("");
+
+        return `
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Hero Rank & Priority -->
+                <div class="selected-patient-hero">
+                    <div>
+                        <span class="${rankClass}">${rankBadgeText}</span>
+                        <div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-top: 4px;">${deltaText}</div>
+                    </div>
+                    <div class="hero-score-box">
+                        <div class="hero-score-val">${patient.priority_score.toFixed(1)}</div>
+                        <div class="hero-score-lbl">PRIORITY SCORE</div>
+                    </div>
+                </div>
+
+                <!-- Clinical Indicators Bars -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+                    <span class="sidebar-title" style="padding-left: 0; font-size: 10px; letter-spacing: 0.8px; display: block; margin-bottom: 8px;">CLINICAL INDICATORS</span>
+                    <div class="metrics-bars-group">
+                        <div class="metric-bar-item">
+                            <div class="bar-header">
+                                <span class="bar-title">Severity (SOFA Derived)</span>
+                                <span class="bar-val">${patient.severity.toFixed(1)}</span>
+                            </div>
+                            <div class="bar-track"><div class="bar-fill" style="width: ${Math.min(100, patient.severity)}%;"></div></div>
+                        </div>
+                        <div class="metric-bar-item">
+                            <div class="bar-header">
+                                <span class="bar-title">Survival Likelihood</span>
+                                <span class="bar-val">${patient.survival_likelihood.toFixed(1)}%</span>
+                            </div>
+                            <div class="bar-track"><div class="bar-fill" style="width: ${Math.min(100, patient.survival_likelihood)}%;"></div></div>
+                        </div>
+                        <div class="metric-bar-item">
+                            <div class="bar-header">
+                                <span class="bar-title">Waiting Duration</span>
+                                <span class="bar-val">${patient.waiting_time_minutes} min</span>
+                            </div>
+                            <div class="bar-track"><div class="bar-fill" style="width: ${Math.min(100, patient.waiting_time_minutes / 1.2)}%;"></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Demographics & Status Snapshot -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; font-size: 11px;">
+                    <span class="sidebar-title" style="padding-left: 0; font-size: 10px; letter-spacing: 0.8px; display: block; margin-bottom: 8px;">PATIENT CLINICAL SNAPSHOT</span>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div><span style="color: #64748b; font-weight: 600;">Record ID:</span> <strong style="color: #0f172a;">${patient.record_id || patient.patient_id}</strong></div>
+                        <div><span style="color: #64748b; font-weight: 600;">Status:</span> <strong style="color: #0284c7;">${patient.patient_status || 'Waiting'}</strong></div>
+                        <div><span style="color: #64748b; font-weight: 600;">Arrival Time:</span> <strong style="color: #0f172a;">${patient.arrival_time || '2025-08-17'}</strong></div>
+                        <div><span style="color: #64748b; font-weight: 600;">Service Unit:</span> <strong style="color: #0f172a;">ICU Allocation</strong></div>
+                    </div>
+                </div>
+
+                ${rawParamsHtml ? `
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+                    <span class="sidebar-title" style="padding-left: 0; font-size: 10px; letter-spacing: 0.8px; display: block; margin-bottom: 8px;">RAW PHYSIOLOGICAL PARAMETERS</span>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px;">
+                        ${rawParamsHtml}
+                    </div>
+                </div>` : ''}
+            </div>
+        `;
+    } else if (mode === "breakdown") {
+        const dominant = sevContrib >= survContrib && sevContrib >= waitContrib ? "Severity (SOFA)" :
+                         survContrib >= waitContrib ? "Survival Likelihood" : "Waiting Duration";
+
+        return `
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Priority Score Card -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="font-size: 10px; font-weight: 800; letter-spacing: 0.8px; color: #64748b; text-transform: uppercase;">PRIORITY SCORE BREAKDOWN</span>
+                        <div style="font-size: 20px; font-weight: 800; color: #0f172a; margin-top: 2px;">${patient.priority_score.toFixed(1)} <span style="font-size: 11px; font-weight: 600; color: #64748b;">PTS TOTAL</span></div>
+                        <div style="font-size: 11px; color: #0284c7; font-weight: 700; margin-top: 2px;">Dominant Driver: ${dominant}</div>
+                    </div>
+                    <span class="${rankClass}">${rankBadgeText}</span>
+                </div>
+
+                <!-- 3 Factor Contributions Grid -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px;">
+                        <div style="font-size: 9.5px; font-weight: 700; color: #64748b;">SEVERITY (50%)</div>
+                        <div style="font-size: 16px; font-weight: 800; color: #0f172a; font-family: var(--font-mono); margin-top: 2px;">+${sevContrib.toFixed(1)}</div>
+                        <div style="font-size: 9.5px; color: #475569; margin-top: 2px;">SOFA ${patient.sofa_score.toFixed(1)}</div>
+                    </div>
+                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px;">
+                        <div style="font-size: 9.5px; font-weight: 700; color: #64748b;">SURVIVAL (30%)</div>
+                        <div style="font-size: 16px; font-weight: 800; color: #0f172a; font-family: var(--font-mono); margin-top: 2px;">+${survContrib.toFixed(1)}</div>
+                        <div style="font-size: 9.5px; color: #475569; margin-top: 2px;">Prog ${patient.survival_likelihood.toFixed(1)}%</div>
+                    </div>
+                    <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px;">
+                        <div style="font-size: 9.5px; font-weight: 700; color: #0284c7;">WAITING (20%)</div>
+                        <div style="font-size: 16px; font-weight: 800; color: #0f172a; font-family: var(--font-mono); margin-top: 2px;">+${waitContrib.toFixed(1)}</div>
+                        <div style="font-size: 9.5px; color: #475569; margin-top: 2px;">Wait ${patient.waiting_time_minutes}m</div>
+                    </div>
+                </div>
+
+                <!-- Weighting Rules Table -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px;">
+                    <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #475569; display: block; margin-bottom: 6px;">WEIGHTING ENGINE FORMULA</span>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 10.5px; text-align: left;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid #e2e8f0; color: #64748b;">
+                                <th style="padding: 4px 6px;">COMPONENT</th>
+                                <th style="padding: 4px 6px;">WEIGHT</th>
+                                <th style="padding: 4px 6px;">RAW METRIC</th>
+                                <th style="padding: 4px 6px;">CONTRIBUTION</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid #f1f5f9;">
+                                <td style="padding: 5px 6px; font-weight: 700;">Severity (SOFA)</td>
+                                <td style="padding: 5px 6px; font-family: var(--font-mono);">50% (0.50)</td>
+                                <td style="padding: 5px 6px; font-family: var(--font-mono);">${patient.severity.toFixed(1)} / 100</td>
+                                <td style="padding: 5px 6px; font-family: var(--font-mono); font-weight: 700; color: #0f172a;">+${sevContrib.toFixed(1)} pts</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #f1f5f9;">
+                                <td style="padding: 5px 6px; font-weight: 700;">Prognostic Survival</td>
+                                <td style="padding: 5px 6px; font-family: var(--font-mono);">30% (0.30)</td>
+                                <td style="padding: 5px 6px; font-family: var(--font-mono);">${patient.survival_likelihood.toFixed(1)}%</td>
+                                <td style="padding: 5px 6px; font-family: var(--font-mono); font-weight: 700; color: #0f172a;">+${survContrib.toFixed(1)} pts</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px 6px; font-weight: 700;">Waiting Equity</td>
+                                <td style="padding: 5px 6px; font-family: var(--font-mono);">20% (0.20)</td>
+                                <td style="padding: 5px 6px; font-family: var(--font-mono);">${patient.waiting_time_minutes} min</td>
+                                <td style="padding: 5px 6px; font-family: var(--font-mono); font-weight: 700; color: #0284c7;">+${waitContrib.toFixed(1)} pts</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    } else if (mode === "why") {
+        const text = explanationText || (isDischarged ?
+            `Patient ${patient.patient_id} has been discharged from the ICU queue and holds no active queue rank position.` :
+            `Patient ${patient.patient_id} holds Rank #${patient.rank} with a priority score of ${patient.priority_score.toFixed(1)} based on organ failure severity and waiting equity.`);
+        const aiText = aiAnswerText ? `<div style="margin-top: 8px; padding: 8px 10px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; font-size: 11px; color: #0369a1;"><strong>CareGrid Intelligence:</strong><br>${aiAnswerText}</div>` : '';
+
+        // Find next adjacent patient for comparison context
+        const prevPatient = (currentPatients && patient.rank) ? currentPatients.find(p => p.rank === patient.rank - 1) : null;
+        const nextPatient = (currentPatients && patient.rank) ? currentPatients.find(p => p.rank === patient.rank + 1) : null;
+
+        let contextHtml = "";
+        if (isDischarged) {
+            contextHtml = `
+                <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px; margin-top: 8px;">
+                    <span style="font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #d97706; display: block; margin-bottom: 4px;">PATIENT STATUS CONTEXT</span>
+                    <div style="font-size: 11px; color: #92400e; line-height: 1.4;">
+                        Patient ${patient.patient_id} was discharged from active bed arbitration. They remain in system history for clinical auditing but do not occupy active queue capacity or rank position.
+                    </div>
+                </div>
+            `;
+        } else if (prevPatient || nextPatient) {
+            contextHtml = `
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 8px;">
+                    <span style="font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #64748b; display: block; margin-bottom: 4px;">QUEUE NEIGHBOR COMPARISON CONTEXT</span>
+                    <div style="display: flex; flex-direction: column; gap: 4px; font-size: 10.5px;">
+                        ${prevPatient ? `<div><span style="color: #64748b;">Rank #${prevPatient.rank} (${prevPatient.patient_id}):</span> <strong style="color: #0f172a;">${prevPatient.priority_score.toFixed(1)} pts</strong> (${(prevPatient.priority_score - patient.priority_score).toFixed(1)} pts above)</div>` : ''}
+                        <div><span style="color: #0284c7; font-weight: 700;">Rank #${patient.rank} (${patient.patient_id}):</span> <strong style="color: #0284c7;">${patient.priority_score.toFixed(1)} pts (TARGET)</strong></div>
+                        ${nextPatient ? `<div><span style="color: #64748b;">Rank #${nextPatient.rank} (${nextPatient.patient_id}):</span> <strong style="color: #0f172a;">${nextPatient.priority_score.toFixed(1)} pts</strong> (${(patient.priority_score - nextPatient.priority_score).toFixed(1)} pts margin)</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        return `
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Cockpit Rank Banner -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <span style="font-size: 10px; font-weight: 800; letter-spacing: 0.8px; color: #64748b; text-transform: uppercase;">GROUNDED RANKING JUSTIFICATION</span>
+                        <div style="display: flex; align-items: baseline; gap: 8px; margin-top: 2px;">
+                            <span style="font-size: ${isDischarged ? '16px' : '24px'}; font-weight: 800; color: ${isDischarged ? '#d97706' : '#0284c7'};">${isDischarged ? 'DISCHARGED' : '#' + patient.rank}</span>
+                            <span style="font-size: 15px; font-weight: 800; color: #0f172a;">PATIENT ${patient.patient_id}</span>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="font-size: 10px; font-weight: 800; letter-spacing: 0.8px; color: #64748b; text-transform: uppercase;">PRIORITY SCORE</span>
+                        <div style="font-size: 20px; font-weight: 800; color: #0f172a; font-family: var(--font-mono); margin-top: 2px;">${patient.priority_score.toFixed(1)}</div>
+                    </div>
+                </div>
+
+                <!-- Grounded Narrative Card -->
+                <div class="explain-card" style="margin-top: 0; background: #ffffff; border: 1px solid #e2e8f0; padding: 12px;">
+                    <span class="explain-eyebrow">DETERMINISTIC STATUS EXPLANATION — ${isDischarged ? 'DISCHARGED' : 'RANK #' + patient.rank}</span>
+                    <p class="explain-text" style="color: #1e293b; font-size: 12px; line-height: 1.5; margin-top: 4px;">${text}</p>
+                    ${aiText}
+                </div>
+
+                ${contextHtml}
+            </div>
+        `;
+    }
+    return "";
+}
+
 async function renderRightPanelTabContent(tabMode) {
     if (!selectedPatientId) return;
     let patient = currentPatients.find(p => p.patient_id === selectedPatientId || p.record_id === selectedPatientId);
     if (!patient) return;
 
+    const mode = tabMode || currentPanelSubTab || "overview";
+    currentPanelSubTab = mode;
+
     // Update dynamic button label
     const ptabWhy = document.getElementById("ptab-explanation");
-    if (ptabWhy) ptabWhy.textContent = `Why #${patient.rank}?`;
+    if (ptabWhy) ptabWhy.textContent = `WHY #${patient.rank}`;
 
-    const rankEl = document.getElementById("panel-explain-rank-text");
-    const pidEl = document.getElementById("panel-explain-pid-text");
-    const scoreEl = document.getElementById("panel-explain-score-text");
-    if (rankEl) rankEl.textContent = `#${patient.rank}`;
-    if (pidEl) pidEl.textContent = patient.patient_id;
-    if (scoreEl) scoreEl.textContent = patient.priority_score.toFixed(1);
+    const container = document.getElementById("panel-view-container");
+    if (!container) return;
 
-    const explainText = document.getElementById("panel-explain-text");
-
-    if (tabMode === "overview") {
+    let explainText = "";
+    if (mode === "why") {
         try {
             const expRes = await fetch(`/api/explain/${patient.patient_id}`);
             const expData = await expRes.json();
-            if (expData.status === "success" && explainText) {
-                explainText.textContent = expData.explainability.explanation_text;
+            if (expData.status === "success") {
+                explainText = expData.explainability.explanation_text;
             }
         } catch (err) {
-            if (explainText) explainText.textContent = `Patient ${patient.patient_id} holds Rank #${patient.rank} with priority score ${patient.priority_score.toFixed(1)}.`;
-        }
-    } else if (tabMode === "breakdown") {
-        const weights = { severity: 0.50, survival: 0.30, waiting: 0.20 };
-        const sevContrib  = +(patient.severity * weights.severity).toFixed(1);
-        const survContrib = +(patient.survival_likelihood * weights.survival).toFixed(1);
-        const waitRaw     = Math.min(100.0, patient.waiting_time_minutes / 1.2);
-        const waitContrib = +(waitRaw * weights.waiting).toFixed(1);
-
-        const contrib = { severity: sevContrib, survival: survContrib, waiting: waitContrib };
-        const dominantKey = Object.entries(contrib).sort((a,b) => b[1]-a[1])[0][0];
-        const dominantLabel = { severity: "Severity", survival: "Survival Likelihood", waiting: "Waiting Duration" }[dominantKey];
-
-        if (explainText) {
-            explainText.innerHTML = `
-                <strong>SCORE BREAKDOWN (Rank #${patient.rank})</strong><br>
-                • Severity (SOFA): +${sevContrib} pts (50% weight)<br>
-                • Survival Likelihood: +${survContrib} pts (30% weight)<br>
-                • Waiting Duration: +${waitContrib} pts (20% weight)<br>
-                <strong>Dominant Factor:</strong> ${dominantLabel}
-            `;
-        }
-    } else if (tabMode === "why") {
-        if (explainText) explainText.textContent = `Fetching grounded rank explanation for Patient ${patient.patient_id}...`;
-        try {
-            const askRes = await fetch("/api/intelligence/ask-patient", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    patient_id: patient.patient_id,
-                    mode: "why_ranked"
-                })
-            });
-            const askData = await askRes.json();
-            if (askData.status === "success" && explainText) {
-                explainText.textContent = askData.answer;
-            }
-        } catch (err) {
-            if (explainText) explainText.textContent = `Patient ${patient.patient_id} is ranked #${patient.rank} with priority score ${patient.priority_score.toFixed(1)}.`;
+            explainText = `Patient ${patient.patient_id} holds Rank #${patient.rank} with priority score ${patient.priority_score.toFixed(1)}.`;
         }
     }
+
+    container.innerHTML = generatePatientViewHTML(patient, mode, explainText, "");
 }
 
 async function renderModalSubTabContent(tabMode) {
@@ -1071,56 +1362,30 @@ async function renderModalSubTabContent(tabMode) {
     let patient = currentPatients.find(p => p.patient_id === selectedPatientId || p.record_id === selectedPatientId);
     if (!patient) return;
 
+    const mode = tabMode || currentModalSubTab || "overview";
+    currentModalSubTab = mode;
+
     // Update dynamic modal button label
     const mtabWhy = document.getElementById("mtab-why");
     if (mtabWhy) mtabWhy.textContent = `WHY #${patient.rank}`;
 
-    const explainText = document.getElementById("modal-explain-text");
+    const container = document.getElementById("modal-view-container");
+    if (!container) return;
 
-    if (tabMode === "overview") {
+    let explainText = "";
+    if (mode === "why") {
         try {
             const expRes = await fetch(`/api/explain/${patient.patient_id}`);
             const expData = await expRes.json();
-            if (expData.status === "success" && explainText) {
-                explainText.textContent = expData.explainability.explanation_text;
+            if (expData.status === "success") {
+                explainText = expData.explainability.explanation_text;
             }
         } catch (err) {
-            if (explainText) explainText.textContent = `High SOFA-derived severity is the primary contributor for Patient ${patient.patient_id}.`;
-        }
-    } else if (tabMode === "breakdown") {
-        const weights = { severity: 0.50, survival: 0.30, waiting: 0.20 };
-        const sevContrib  = +(patient.severity * weights.severity).toFixed(1);
-        const survContrib = +(patient.survival_likelihood * weights.survival).toFixed(1);
-        const waitRaw     = Math.min(100.0, patient.waiting_time_minutes / 1.2);
-        const waitContrib = +(waitRaw * weights.waiting).toFixed(1);
-
-        if (explainText) {
-            explainText.innerHTML = `
-                SCORE CONTRIBUTION BREAKDOWN — PATIENT ${patient.patient_id} (Rank #${patient.rank})<br>
-                • Severity (SOFA-derived): ${patient.severity} → +${sevContrib} pts<br>
-                • Survival Likelihood: ${patient.survival_likelihood}% → +${survContrib} pts<br>
-                • Waiting Duration: ${patient.waiting_time_minutes} min → +${waitContrib} pts
-            `;
-        }
-    } else if (tabMode === "why") {
-        if (explainText) explainText.textContent = `Loading grounded rank explanation for Patient ${patient.patient_id}...`;
-        try {
-            const askRes = await fetch("/api/intelligence/ask-patient", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    patient_id: patient.patient_id,
-                    mode: "why_ranked"
-                })
-            });
-            const askData = await askRes.json();
-            if (askData.status === "success" && explainText) {
-                explainText.textContent = askData.answer;
-            }
-        } catch (err) {
-            if (explainText) explainText.textContent = `Patient ${patient.patient_id} is ranked #${patient.rank} with priority score ${patient.priority_score.toFixed(1)}.`;
+            explainText = `Patient ${patient.patient_id} holds Rank #${patient.rank} with priority score ${patient.priority_score.toFixed(1)}.`;
         }
     }
+
+    container.innerHTML = generatePatientViewHTML(patient, mode, explainText, "");
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1338,14 +1603,14 @@ function renderComparisonChart(patientA, patientB) {
     if (!container || !patientA || !patientB) return;
 
     const metrics = [
-        { label: "Priority Score", valA: patientA.priority_score, valB: patientB.priority_score, max: 100 },
-        { label: "Severity (SOFA)", valA: patientA.severity, valB: patientB.severity, max: 100 },
-        { label: "Survival Potential (%)", valA: patientA.survival_likelihood, valB: patientB.survival_likelihood, max: 100 },
-        { label: "Wait Duration (min)", valA: Math.min(100, patientA.waiting_time_minutes / 1.5), valB: Math.min(100, patientB.waiting_time_minutes / 1.5), max: 100 }
+        { label: "Priority Score", valA: patientA.priority_score, valB: patientB.priority_score, max: 100, unit: "" },
+        { label: "Severity (SOFA)", valA: patientA.severity, valB: patientB.severity, max: 100, unit: "" },
+        { label: "Survival Potential (%)", valA: patientA.survival_likelihood, valB: patientB.survival_likelihood, max: 100, unit: "%" },
+        { label: "Wait Duration (min)", valA: patientA.waiting_time_minutes, valB: patientB.waiting_time_minutes, max: 180, unit: "m" }
     ];
 
     let html = `
-        <div style="display: flex; gap: 16px; margin-bottom: 8px; font-size: 11px; font-weight: 700;">
+        <div style="display: flex; gap: 16px; margin-bottom: 10px; font-size: 11px; font-weight: 700;">
             <div style="display: flex; align-items: center; gap: 6px;">
                 <span style="width: 10px; height: 10px; background: #0284c7; border-radius: 2px;"></span>
                 <span style="color: #0284c7;">Patient ${patientA.patient_id} (Rank #${patientA.rank})</span>
@@ -1355,7 +1620,7 @@ function renderComparisonChart(patientA, patientB) {
                 <span style="color: #059669;">Patient ${patientB.patient_id} (Rank #${patientB.rank})</span>
             </div>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 10.5px;">
+        <div style="display: flex; flex-direction: column; gap: 10px; font-size: 10.5px;">
     `;
 
     metrics.forEach(m => {
@@ -1364,17 +1629,17 @@ function renderComparisonChart(patientA, patientB) {
 
         html += `
             <div>
-                <div style="font-weight: 600; color: #475569; margin-bottom: 2px;">${m.label}</div>
-                <div style="display: flex; flex-direction: column; gap: 3px;">
+                <div style="font-weight: 600; color: #475569; margin-bottom: 3px;">${m.label}</div>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="width: 40px; font-family: var(--font-mono); font-size: 10px; color: #0284c7; font-weight: 700;">${m.valA.toFixed(1)}</span>
-                        <div style="flex: 1; height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                        <span style="width: 45px; font-family: var(--font-mono); font-size: 10px; color: #0284c7; font-weight: 700;">${m.valA.toFixed(0)}${m.unit}</span>
+                        <div style="flex: 1; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
                             <div style="height: 100%; width: ${pctA}%; background: #0284c7; border-radius: 3px;"></div>
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="width: 40px; font-family: var(--font-mono); font-size: 10px; color: #059669; font-weight: 700;">${m.valB.toFixed(1)}</span>
-                        <div style="flex: 1; height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                        <span style="width: 45px; font-family: var(--font-mono); font-size: 10px; color: #059669; font-weight: 700;">${m.valB.toFixed(0)}${m.unit}</span>
+                        <div style="flex: 1; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
                             <div style="height: 100%; width: ${pctB}%; background: #059669; border-radius: 3px;"></div>
                         </div>
                     </div>
@@ -1385,4 +1650,258 @@ function renderComparisonChart(patientA, patientB) {
 
     html += `</div>`;
     container.innerHTML = html;
+}
+
+/* ============================================================
+   CAREGRID V5.0 COMMAND CENTER DEDICATED WHAT-IF WORKSPACE MODAL
+   ============================================================ */
+
+function openWhatIfModal(pid) {
+    const targetId = pid || selectedPatientId;
+    if (!targetId || !currentPatients) return;
+
+    const patient = currentPatients.find(p => p.patient_id === targetId || p.record_id === targetId);
+    if (!patient) return;
+
+    const modal = document.getElementById("patient-whatif-modal");
+    if (!modal) return;
+
+    document.getElementById("modal-whatif-title").textContent = `WHAT-IF SCENARIO: PATIENT ${patient.patient_id}`;
+    document.getElementById("modal-whatif-target-pid").textContent = patient.patient_id;
+    document.getElementById("modal-whatif-target-info").textContent = `Live Rank #${patient.rank} | Live Priority Score ${patient.priority_score.toFixed(1)}`;
+
+    document.getElementById("mwhatif-cur-wait").textContent = `Live: ${patient.waiting_time_minutes}m`;
+    document.getElementById("mwhatif-cur-sofa").textContent = `Live: SOFA ${patient.sofa_score.toFixed(1)}`;
+    document.getElementById("mwhatif-cur-surv").textContent = `Live: ${patient.survival_likelihood.toFixed(1)}%`;
+
+    document.getElementById("mwhatif-input-wait").value = "";
+    document.getElementById("mwhatif-input-sofa").value = "";
+    document.getElementById("mwhatif-input-surv").value = "";
+
+    resetModalWhatIfReport();
+
+    modal.classList.remove("hidden");
+}
+
+function closeWhatIfModal() {
+    const modal = document.getElementById("patient-whatif-modal");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function runModalWhatIfSimulation() {
+    const pidText = document.getElementById("modal-whatif-target-pid").textContent;
+    const container = document.getElementById("mwhatif-output-container");
+    if (!pidText || !container) return;
+
+    const waitVal = document.getElementById("mwhatif-input-wait").value.trim();
+    const sofaVal = document.getElementById("mwhatif-input-sofa").value.trim();
+    const survVal = document.getElementById("mwhatif-input-surv").value.trim();
+
+    const scenario_changes = {};
+    if (waitVal !== "") scenario_changes.waiting_time_minutes = parseInt(waitVal);
+    if (sofaVal !== "") scenario_changes.sofa_score = parseFloat(sofaVal);
+    if (survVal !== "") scenario_changes.survival_likelihood = parseFloat(survVal);
+
+    if (Object.keys(scenario_changes).length === 0) {
+        container.innerHTML = `
+            <div style="padding: 14px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; font-size: 12px; color: #92400e;">
+                SCENARIO PARAMETER REQUIRED: Please enter at least one hypothetical factor (Waiting Time, SOFA Score, or Survival Likelihood) to run simulation.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="text-align: center; padding: 25px; color: #64748b;">
+            <div style="font-size: 13px; font-weight: 600;">Executing Isolated Sandbox What-If Simulation...</div>
+        </div>
+    `;
+
+    try {
+        const res = await fetch("/api/simulation/what-if", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                patient_id: pidText,
+                scenario_changes: scenario_changes
+            })
+        });
+
+        const data = await res.json();
+        if (data.status === "success") {
+            renderModalWhatIfReport(data);
+        } else {
+            container.innerHTML = `<div style="padding: 14px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; font-size: 12px; color: #991b1b;">Error: ${data.message}</div>`;
+        }
+    } catch (err) {
+        container.innerHTML = `<div style="padding: 14px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; font-size: 12px; color: #991b1b;">Simulation Error: ${err.message}</div>`;
+    }
+}
+
+function renderModalWhatIfReport(data) {
+    const container = document.getElementById("mwhatif-output-container");
+    if (!container || !data) return;
+
+    const b = data.before_state;
+    const a = data.after_state;
+    const imp = data.impact_summary;
+
+    const scoreSign = imp.score_delta >= 0 ? "+" : "";
+    const rankColor = imp.rank_delta > 0 ? "#059669" : (imp.rank_delta < 0 ? "#d97706" : "#64748b");
+    const rankShiftText = imp.rank_delta > 0 ? `+${imp.rank_delta} positions (UP)` : (imp.rank_delta < 0 ? `-${Math.abs(imp.rank_delta)} positions (DOWN)` : `UNCHANGED`);
+
+    let eventsHtml = data.event_details.map(ev => `
+        <div style="font-size: 11px; margin-bottom: 4px; color: #1e293b;">
+            <strong>${ev.factor}:</strong> ${ev.before} → <span style="color: #0284c7; font-weight: 700;">${ev.after}</span> (${ev.change})
+        </div>
+    `).join("");
+
+    let affectedRows = "";
+    if (data.affected_rank_shifts && data.affected_rank_shifts.length > 0) {
+        affectedRows = data.affected_rank_shifts.map(p => `
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 11px; display: flex; justify-content: space-between;">
+                <span style="font-weight: 700; color: #0f172a;">${p.patient_id}</span>
+                <span style="font-family: var(--font-mono); font-weight: 700; color: ${p.before_rank > p.after_rank ? '#059669' : '#d97706'};">${p.rank_shift}</span>
+            </div>
+        `).join("");
+    } else {
+        affectedRows = `<div style="font-size: 11px; color: #64748b;">No other patients shifted queue position.</div>`;
+    }
+
+    const html = `
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+            <!-- Sandbox Header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: #ffffff; padding: 8px 14px; border-radius: 8px; font-size: 11px; font-weight: 700;">
+                <span>SANDBOX ISOLATED SIMULATION REPORT</span>
+                <span style="font-family: var(--font-mono); color: #94a3b8; font-weight: 400; font-size: 10px;">LIVE CAREGRID STATE UNCHANGED</span>
+            </div>
+
+            <!-- BEFORE -> EVENT -> AFTER 3-Column Grid -->
+            <div style="display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 12px;">
+                <!-- BEFORE -->
+                <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px;">
+                    <span style="font-size: 9.5px; font-weight: 800; letter-spacing: 0.6px; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 6px;">BEFORE (LIVE STATE)</span>
+                    <div style="font-size: 20px; font-weight: 800; color: #0f172a;">${b.priority_score.toFixed(1)} <span style="font-size: 11px; font-weight: 600; color: #64748b;">PRIORITY</span></div>
+                    <div style="font-size: 12px; font-weight: 700; color: #0284c7; margin-bottom: 6px;">Rank #${b.rank}</div>
+                    <div style="font-size: 11px; color: #475569; font-family: var(--font-mono);">
+                        <div>SOFA: ${b.sofa_score.toFixed(1)} (Sev ${b.severity.toFixed(0)})</div>
+                        <div>Survival: ${b.survival_likelihood.toFixed(0)}%</div>
+                        <div>Wait: ${b.waiting_time_minutes}m</div>
+                    </div>
+                </div>
+
+                <!-- EVENT -->
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px;">
+                    <span style="font-size: 9.5px; font-weight: 800; letter-spacing: 0.6px; color: #0284c7; text-transform: uppercase; display: block; margin-bottom: 6px;">TESTED EVENT</span>
+                    <div style="font-weight: 700; color: #0f172a; font-size: 12px; margin-bottom: 6px;">Scenario Changes</div>
+                    ${eventsHtml}
+                </div>
+
+                <!-- AFTER -->
+                <div style="background: #ffffff; border: 2px solid ${rankColor}; border-radius: 10px; padding: 12px;">
+                    <span style="font-size: 9.5px; font-weight: 800; letter-spacing: 0.6px; color: ${rankColor}; text-transform: uppercase; display: block; margin-bottom: 6px;">AFTER (SIMULATED)</span>
+                    <div style="font-size: 20px; font-weight: 800; color: #0f172a;">${a.priority_score.toFixed(1)} <span style="font-size: 11px; font-weight: 700; color: ${rankColor};">(${scoreSign}${imp.score_delta.toFixed(1)})</span></div>
+                    <div style="font-size: 12px; font-weight: 700; color: ${rankColor}; margin-bottom: 6px;">Rank #${a.rank} (${rankShiftText})</div>
+                    <div style="font-size: 11px; color: #475569; font-family: var(--font-mono);">
+                        <div>SOFA: ${a.sofa_score.toFixed(1)} (Sev ${a.severity.toFixed(0)})</div>
+                        <div>Survival: ${a.survival_likelihood.toFixed(0)}%</div>
+                        <div>Wait: ${a.waiting_time_minutes}m</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Comparison Table -->
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+                <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #475569; display: block; margin-bottom: 8px;">LIVE VS SIMULATED METRIC COMPARISON</span>
+                <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid #e2e8f0; color: #64748b;">
+                            <th style="padding: 4px 6px;">METRIC</th>
+                            <th style="padding: 4px 6px;">LIVE STATE</th>
+                            <th style="padding: 4px 6px;">SIMULATED STATE</th>
+                            <th style="padding: 4px 6px;">NET CHANGE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 6px; font-weight: 700;">Priority Score</td>
+                            <td style="padding: 6px; font-family: var(--font-mono);">${b.priority_score.toFixed(1)}</td>
+                            <td style="padding: 6px; font-family: var(--font-mono); font-weight: 700; color: #0284c7;">${a.priority_score.toFixed(1)}</td>
+                            <td style="padding: 6px; font-family: var(--font-mono); font-weight: 700;">${scoreSign}${imp.score_delta.toFixed(1)} pts</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 6px; font-weight: 700;">Queue Rank</td>
+                            <td style="padding: 6px; font-family: var(--font-mono);">Rank #${b.rank}</td>
+                            <td style="padding: 6px; font-family: var(--font-mono); font-weight: 700; color: ${rankColor};">Rank #${a.rank}</td>
+                            <td style="padding: 6px; font-family: var(--font-mono); font-weight: 700; color: ${rankColor};">${rankShiftText}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px; font-weight: 700;">Waiting Duration</td>
+                            <td style="padding: 6px; font-family: var(--font-mono);">${b.waiting_time_minutes} min</td>
+                            <td style="padding: 6px; font-family: var(--font-mono); font-weight: 700;">${a.waiting_time_minutes} min</td>
+                            <td style="padding: 6px; font-family: var(--font-mono); font-weight: 700;">${a.waiting_time_minutes - b.waiting_time_minutes >= 0 ? '+' : ''}${a.waiting_time_minutes - b.waiting_time_minutes} min</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Priority Contribution Shift Breakdown -->
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+                <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #475569; display: block; margin-bottom: 8px;">PRIORITY CONTRIBUTION SHIFT</span>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 11px;">
+                    <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 6px; padding: 8px;">
+                        <div style="color: #64748b; font-size: 10px; font-weight: 700;">SEVERITY (SOFA 50%)</div>
+                        <div style="font-weight: 700; color: #0f172a; margin-top: 2px;">${b.severity_contribution.toFixed(1)} → ${a.severity_contribution.toFixed(1)} pts</div>
+                        <div style="font-size: 10px; font-family: var(--font-mono); color: #0284c7;">Delta: ${(imp.factor_deltas.severity_contribution >= 0 ? '+' : '') + imp.factor_deltas.severity_contribution.toFixed(1)} pts</div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 6px; padding: 8px;">
+                        <div style="color: #64748b; font-size: 10px; font-weight: 700;">SURVIVAL (PROG 30%)</div>
+                        <div style="font-weight: 700; color: #0f172a; margin-top: 2px;">${b.survival_contribution.toFixed(1)} → ${a.survival_contribution.toFixed(1)} pts</div>
+                        <div style="font-size: 10px; font-family: var(--font-mono); color: #0284c7;">Delta: ${(imp.factor_deltas.survival_contribution >= 0 ? '+' : '') + imp.factor_deltas.survival_contribution.toFixed(1)} pts</div>
+                    </div>
+                    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px;">
+                        <div style="color: #0284c7; font-size: 10px; font-weight: 700;">WAIT EQUITY (20%)</div>
+                        <div style="font-weight: 700; color: #0f172a; margin-top: 2px;">${b.waiting_contribution.toFixed(1)} → ${a.waiting_contribution.toFixed(1)} pts</div>
+                        <div style="font-size: 10px; font-family: var(--font-mono); color: #0284c7; font-weight: 700;">Delta: ${(imp.factor_deltas.waiting_contribution >= 0 ? '+' : '') + imp.factor_deltas.waiting_contribution.toFixed(1)} pts [PRIMARY]</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Affected Patient Movements -->
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+                <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #475569; display: block; margin-bottom: 8px;">AFFECTED QUEUE PATIENT MOVEMENTS</span>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px;">
+                    ${affectedRows}
+                </div>
+            </div>
+
+            <!-- Deterministic Explanation -->
+            <div class="explain-card" style="margin-top: 0; background: #ffffff; border: 1px solid #e2e8f0;">
+                <span class="explain-eyebrow">DETERMINISTIC SIMULATION ANALYSIS</span>
+                <p class="explain-text" style="color: #1e293b; font-size: 12px; line-height: 1.6;">${data.deterministic_explanation}</p>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+function resetModalWhatIfReport() {
+    const inputWait = document.getElementById("mwhatif-input-wait");
+    const inputSofa = document.getElementById("mwhatif-input-sofa");
+    const inputSurv = document.getElementById("mwhatif-input-surv");
+    const container = document.getElementById("mwhatif-output-container");
+
+    if (inputWait) inputWait.value = "";
+    if (inputSofa) inputSofa.value = "";
+    if (inputSurv) inputSurv.value = "";
+
+    if (container) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 30px 20px; color: #64748b;">
+                <h4 style="font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 4px;">What-If Scenario Simulation Workspace Reset</h4>
+                <p style="font-size: 12px; max-width: 460px; margin: 0 auto;">Live CareGrid state baseline restored. Enter hypothetical parameters above and click "RUN WHAT-IF SIMULATION".</p>
+            </div>
+        `;
+    }
 }

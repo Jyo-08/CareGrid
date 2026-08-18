@@ -26,14 +26,25 @@ class EventEngine:
     def get_all_patients(self) -> List[Patient]:
         pass
 
-    def get_ranked_patients(self, limit: Optional[int] = None) -> List[Patient]:
-        patient_list = list(self.patients_map.values())
+    def get_ranked_patients(self, limit: Optional[int] = None, include_discharged: bool = False) -> List[Patient]:
+        if include_discharged:
+            patient_list = list(self.patients_map.values())
+        else:
+            patient_list = [p for p in self.patients_map.values() if p.patient_status != "Discharged"]
         ranked = self.engine.rank_patients(patient_list)
         return ranked[:limit] if limit else ranked
 
     def re_rank_all(self, trigger_reason: str = "STATE_CHANGE") -> List[Patient]:
-        patient_list = list(self.patients_map.values())
-        return self.engine.rank_patients(patient_list)
+        # Reset rank of discharged patients so they do not hold active rank positions
+        for p in self.patients_map.values():
+            if p.patient_status == "Discharged":
+                if p.rank is not None and p.rank > 0:
+                    p.previous_rank = p.rank
+                p.rank = None
+                p.rank_delta = 0
+
+        active_patient_list = [p for p in self.patients_map.values() if p.patient_status != "Discharged"]
+        return self.engine.rank_patients(active_patient_list)
 
     def process_event(
         self,
@@ -53,7 +64,7 @@ class EventEngine:
 
         target_patient = self.patients_map.get(patient_id) if patient_id else None
         prev_val = None
-        prev_rank = before_ranks.get(patient_id) if patient_id else None
+        prev_rank = before_ranks.get(patient_id) if patient_id else (target_patient.rank if target_patient else None)
 
         # Execute State Transition
         if event_type == "NEW_PATIENT":
@@ -113,10 +124,13 @@ class EventEngine:
                 raise KeyError(f"Patient {patient_id} not found")
             prev_val = target_patient.patient_status
             target_patient.patient_status = "Discharged"
+            target_patient.previous_rank = prev_rank
+            target_patient.rank = None
+            target_patient.rank_delta = 0
             target_patient.last_event_trigger = event_type
             if self.occupied_beds > 0:
                 self.occupied_beds -= 1
-            reason = reason or f"Patient {patient_id} discharged from ICU"
+            reason = reason or f"Patient {patient_id} discharged from ICU queue"
 
         elif event_type == "ICU_BED_AVAILABLE":
             prev_val = self.occupied_beds
