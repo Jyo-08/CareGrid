@@ -524,31 +524,6 @@ class CareGridRequestHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json_response({"status": "error", "message": f"What-If Simulation error: {str(e)}"}, 500)
 
-        elif path == "/api/simulation/what-if":
-            pid = data.get("patient_id")
-            scenario_changes = data.get("scenario_changes", {})
-            cap_change = int(data.get("capacity_change", 0))
-
-            if not pid:
-                self.send_json_response({"status": "error", "message": "patient_id is required for what-if simulation"}, 400)
-                return
-
-            if not scenario_changes:
-                self.send_json_response({"status": "error", "message": "scenario_changes must contain at least one factor update"}, 400)
-                return
-
-            try:
-                live_patients = event_engine.get_ranked_patients()
-                sim_res = whatif_engine.run_what_if_scenario(
-                    live_patients=live_patients,
-                    patient_id=pid,
-                    scenario_changes=scenario_changes,
-                    capacity_change=cap_change
-                )
-                self.send_json_response(sim_res)
-            except Exception as e:
-                self.send_json_response({"status": "error", "message": f"What-If Simulation error: {str(e)}"}, 500)
-
         elif path == "/api/simulation/what-if-organ":
             pid = data.get("patient_id")
             organ_system = data.get("organ_system", "respiratory")
